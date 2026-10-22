@@ -2,7 +2,9 @@
 
 # chiaki-ngx
 
-A fork of [chiaki-ng](https://github.com/chiaki-ng/chiaki-ng), aiming to deliver next-generation features and more.
+A fork of [chiaki-ng](https://github.com/chiaki-ng/chiaki-ng), DLSS5, Upscaler and Framegen for all RTX GPUs.
+
+Tested on RTX 3000s.
 
 For PlayStation setup and general help, see the [original documentation](https://chiaki-ng.github.io/chiaki-ng/).
 
