@@ -1,4 +1,4 @@
-name: Build chiaki-ng msys2 arm64 Windows
+name: Build chiaki-ngx msys2 arm64 Windows
 
 on:
   workflow_dispatch:
@@ -82,31 +82,31 @@ jobs:
           INSTALL_PREFIX=/clangarm64 scripts/build-sdl2-compat.sh .
           cp /clangarm64/lib/pkgconfig/sdl2-compat.pc /clangarm64/lib/pkgconfig/sdl2.pc
 
-      - name: Configure chiaki-ng
+      - name: Configure chiaki-ngx
         run: |
           cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCHIAKI_ENABLE_CLI=OFF
 
-      - name: Build chiaki-ng
+      - name: Build chiaki-ngx
         run: |
           cmake --build build --config Release --clean-first --target chiaki
           
-      - name: Deploy chiaki-ng
+      - name: Deploy chiaki-ngx
         run: |
-          ./scripts/deploy-windows-msys2.sh chiaki-ng-Win build/gui/chiaki.exe "${{ github.workspace }}/build/third-party/cpp-steam-tools" /clangarm64 gui/src/qml
+          ./scripts/deploy-windows-msys2.sh chiaki-ngx-Win build/gui/chiaki.exe "${{ github.workspace }}/build/third-party/cpp-steam-tools" /clangarm64 gui/src/qml
 
-      - name: Package chiaki-ng
+      - name: Package chiaki-ngx
         run: |
           CHIAKI_VERSION_MAJOR="$(grep 'CHIAKI_VERSION_MAJOR' CMakeLists.txt | grep -Eo '[0-9]+')"
           CHIAKI_VERSION_MINOR="$(grep 'CHIAKI_VERSION_MINOR' CMakeLists.txt | grep -Eo '[0-9]+')"
           CHIAKI_VERSION_PATCH="$(grep 'CHIAKI_VERSION_PATCH' CMakeLists.txt | grep -Eo '[0-9]+')"
-          RELEASE_PACKAGE_FILE="chiaki-ng-win_arm64-MSYS2-portable-$CHIAKI_VERSION_MAJOR.$CHIAKI_VERSION_MINOR.$CHIAKI_VERSION_PATCH-test-build-${{ github.sha }}.zip"
-          zip -r $RELEASE_PACKAGE_FILE chiaki-ng-Win
+          RELEASE_PACKAGE_FILE="chiaki-ngx-win_arm64-MSYS2-portable-$CHIAKI_VERSION_MAJOR.$CHIAKI_VERSION_MINOR.$CHIAKI_VERSION_PATCH-test-build-${{ github.sha }}.zip"
+          zip -r $RELEASE_PACKAGE_FILE chiaki-ngx-Win
           echo "RELEASE_PACKAGE_PATH=${RELEASE_PACKAGE_FILE}" >> $GITHUB_ENV
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-win_arm64-MSYS2-Release-portable.zip
+          name: chiaki-ngx-win_arm64-MSYS2-Release-portable.zip
           path: ${{ env.RELEASE_PACKAGE_PATH }}
           if-no-files-found: error
           retention-days: 7
@@ -114,14 +114,14 @@ jobs:
       - name: Compile .ISS to .EXE Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          path: "scripts/chiaki-ng.iss"
+          path: "scripts/chiaki-ngx.iss"
           options: /O+
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-win_arm64-MSYS2-Release-installer.exe
-          path: chiaki-ng-windows-installer.exe
+          name: chiaki-ngx-win_arm64-MSYS2-Release-installer.exe
+          path: chiaki-ngx-windows-installer.exe
           if-no-files-found: error
           retention-days: 7
           

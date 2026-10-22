@@ -2,11 +2,11 @@
 
 !!! Abstract "Site Purpose"
 
-    This site serves to get you up and running with chiaki-ng!
+    This site serves to get you up and running with chiaki-ngx!
 
 ## Getting Started
 
-Start by visiting the [Setup section](setup/index.md){target="_blank" rel="noopener"} and following each of the subsections to learn how to setup `chiaki-ng`.
+Start by visiting the [Setup section](setup/index.md){target="_blank" rel="noopener"} and following each of the subsections to learn how to setup `chiaki-ngx`.
 
 ## Supporting
 
@@ -14,7 +14,7 @@ Start by visiting the [Setup section](setup/index.md){target="_blank" rel="noope
 
 ## Getting Updates
 
-Visit [chiaki-ng Releases](updates/releases.md){target="_blank" rel="noopener"} for instructions on updating to the newest release, with notes for each release.
+Visit [chiaki-ngx Releases](updates/releases.md){target="_blank" rel="noopener"} for instructions on updating to the newest release, with notes for each release.
 
 ## Additional Information
 
@@ -22,15 +22,15 @@ Visit [chiaki-ng Releases](updates/releases.md){target="_blank" rel="noopener"} 
 
 [Chiaki](https://git.sr.ht/~thestr4ng3r/chiaki){target="_blank" rel="noopener"} is a "Free and Open Source PlayStation Remote Play Client" licensed under the [GNU Affero General Public License version 3](https://www.gnu.org/licenses/agpl-3.0.html){target="_blank" rel="noopener"} (AGPL V3). This license enables anyone to share and modify the source code to add additional features on the condition that they make those publicly available (copy-left) and also license them under the same AGPL V3 license.
 
-### About `chiaki-ng`
+### About `chiaki-ngx`
 
-`chiaki-ng` aims to serve as a next generation of Chiaki bringing new features and changes to the existing project which is now in maintenance mode. It is available on Linux, Windows, and MacOS.
+`chiaki-ngx` aims to serve as a next generation of Chiaki bringing new features and changes to the existing project which is now in maintenance mode. It is available on Linux, Windows, and MacOS.
 
-!!! Question "Where is `chiaki-ng` available?"
+!!! Question "Where is `chiaki-ngx` available?"
 
     There is a flatpak on flathub for Linux (https://flathub.org/apps/io.github.streetpea.Chiaki4deck){target="_blank" rel="noopener"} as well as packages for Linux, Windows, and macOS on Apple Silicon (arm64) on the [releases page](https://github.com/streetpea/chiaki4deck/releases){target="_blank" rel="noopener"}. Intel macOS (x86_64/amd64) builds are no longer produced or tested by GitHub Actions. See the [Installation section](setup/installation.md){target="_blank" rel="noopener"} to get started.
     
-For users that want to build from source, I have also provided the updated source code on the accompanying GitHub repo (the link to the GitHub is on the top right [top left menu on mobile] of the site banner you see if you scroll to the top of any page). Instructions for this are in the [DIY section](diy/buildit.md){target="_blank" rel="noopener"}. As it stands, a lot of the documentation applies to the general Chiaki flatpak in addition to the `chiaki-ng` flatpak, but instructions are specifically tailored to `chiaki-ng` and the updates included therein. To use this documentation with the Chiaki flatpak replace `io.github.streetpea.Chiaki4deck` with `re.chiaki.Chiaki` where applicable and note that the features listed in the [Updates section](updates/done.md){target="_blank" rel="noopener"} will not work with that version (they only work with `chiaki-ng` until the main `Chiaki` flatpak gets an update.)
+For users that want to build from source, I have also provided the updated source code on the accompanying GitHub repo (the link to the GitHub is on the top right [top left menu on mobile] of the site banner you see if you scroll to the top of any page). Instructions for this are in the [DIY section](diy/buildit.md){target="_blank" rel="noopener"}. As it stands, a lot of the documentation applies to the general Chiaki flatpak in addition to the `chiaki-ngx` flatpak, but instructions are specifically tailored to `chiaki-ngx` and the updates included therein. To use this documentation with the Chiaki flatpak replace `io.github.streetpea.Chiaki4deck` with `re.chiaki.Chiaki` where applicable and note that the features listed in the [Updates section](updates/done.md){target="_blank" rel="noopener"} will not work with that version (they only work with `chiaki-ngx` until the main `Chiaki` flatpak gets an update.)
 
 ## Submitting Documentation Updates
 
@@ -38,7 +38,7 @@ If you want to update the documentation to add helpful information of your own, 
 
 ## Making Suggestions for Improvements to the Documentation
 
-Please submit general issues to the [chiaki-ng GitHub](https://github.com/streetpea/chiaki-ng/issues){target="_blank" rel="noopener"} as well as specific issues related to a given page by clicking the :material-heart-broken: underneath "Was this page helpful?" and opening the feedback form for the page you think needs updating.
+Please submit general issues to the [chiaki-ngx GitHub](https://github.com/TheHiepDang/chiaki-ngx/issues){target="_blank" rel="noopener"} as well as specific issues related to a given page by clicking the :material-heart-broken: underneath "Was this page helpful?" and opening the feedback form for the page you think needs updating.
 
 ## Acknowledgements
 
@@ -47,7 +47,7 @@ Please submit general issues to the [chiaki-ng GitHub](https://github.com/street
     - Reddit users and others who have helped me in my personal Chiaki journey such as u/mintcu7000 with his getting started guide on Reddit
     - Egoistically for the RGB update patch
     - Florian Grill for his gracious help with reverse engineering the PlayStation remote play protocols
-    - Kirin Ghost for creating chiaki-ng artwork
+    - Kirin Ghost for creating chiaki-ngx artwork
 
 * Thanks to the following open-source projects for inspiration around Steam Deck gyro and haptics:
     - [Steam Controller Singer](https://github.com/Roboron3042/SteamControllerSinger){target="_blank" rel="noopener"}

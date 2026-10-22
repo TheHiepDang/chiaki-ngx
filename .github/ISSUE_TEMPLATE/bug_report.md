@@ -10,8 +10,10 @@ assignees: ''
 **Describe the bug**
 A clear and concise description of what the bug is.
 
-**Debug Log**
-Please attach a log with verbose logging enabled.
+**Logs**
+Open Settings → General → Log Directory → Open. Attach the matching `chiaki_ngx_*.log` and its `.previous.log` sibling if present; also include `chiaki_session_*.log` for streaming problems and any matching `*-crash.txt` for a crash. Submit complete logs, including `[RTX]`, `[EyeCandy]` or `[Screenshot]` messages relevant to the issue.
+
+For SM86 FG, also attach matching `loader_*.jsonl` and `backend_*.jsonl` from `runtimes/sm86-proxy/dlssg_sm86/logs/` in the release folder. Review files before posting. Share `*-crash.dmp` privately because it may contain personal data.
 
 **To Reproduce**
 Steps to reproduce the behavior:
@@ -30,7 +32,9 @@ If applicable, add screenshots to help explain your problem.
  - OS: [e.g. SteamOS]
  - Version [e.g. 22]
  - Device [e.g. Steam Deck]
- - chiaki-ng Version [e.g. 1.6.2]
+ - GPU and driver version
+ - RTX / Eye Candy settings (if relevant)
+ - chiaki-ngx Version [e.g. 1.6.2]
 
 **Additional context**
 Add any other context about the problem here.

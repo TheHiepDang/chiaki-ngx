@@ -1,11 +1,11 @@
-name: Build chiaki-ng Windows arm64 (VC)
+name: Build chiaki-ngx Windows arm64 (VC)
 
 on:
   workflow_dispatch:
 
 jobs:
   build-win_arm64:
-    name: Build chiaki-ng win_arm64 (VC)
+    name: Build chiaki-ngx win_arm64 (VC)
     runs-on: windows-11-arm
     env:
       CC: clang-cl.exe
@@ -138,7 +138,7 @@ jobs:
           git apply --ignore-whitespace --verbose --directory=third-party/gf-complete/ scripts/windows-vc/gf-complete.patch
           git apply --ignore-whitespace --verbose scripts/windows-vc/libplacebo-pc.patch
 
-      - name: Configure chiaki-ng
+      - name: Configure chiaki-ngx
         run: |
           cmake `
           -S . `
@@ -153,44 +153,44 @@ jobs:
           -DPYTHON_EXECUTABLE="${{ env.pythonLocation }}\python.exe" `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\${{ env.dep_folder }};${{ env.VULKAN_SDK }}"
 
-      - name: Build chiaki-ng
+      - name: Build chiaki-ngx
         run: |
           cmake --build build --config Release --clean-first --target chiaki
 
       - name: Prepare Qt deployment package
         run: |
-          mkdir chiaki-ng-Win
-          cp build\gui\chiaki.exe chiaki-ng-Win
-          cp build\third-party\cpp-steam-tools\cpp-steam-tools.dll chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libcrypto-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libssl-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\SDL2.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\hidapi.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\fftw3.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\opus.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libspeexdsp.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\lcms2.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\miniupnpc.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\json-c.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\swresample-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avcodec-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avutil-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avformat-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\libplacebo-*.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\shaderc_shared.dll" chiaki-ng-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\spirv-cross-c-shared.dll" chiaki-ng-Win
-          windeployqt.exe --no-translations --qmldir=gui\src\qml --release chiaki-ng-Win\chiaki.exe
+          mkdir chiaki-ngx-Win
+          cp build\gui\chiaki.exe chiaki-ngx-Win
+          cp build\third-party\cpp-steam-tools\cpp-steam-tools.dll chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libcrypto-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libssl-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\SDL2.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\hidapi.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\fftw3.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\opus.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\libspeexdsp.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\lcms2.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\miniupnpc.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\vcpkg_installed\${{ env.triplet }}\bin\json-c.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\swresample-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avcodec-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avutil-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avformat-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\libplacebo-*.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\shaderc_shared.dll" chiaki-ngx-Win
+          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\spirv-cross-c-shared.dll" chiaki-ngx-Win
+          windeployqt.exe --no-translations --qmldir=gui\src\qml --release chiaki-ngx-Win\chiaki.exe
 
       - name: Compile .ISS to .EXE Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          path: "scripts/chiaki-ng.iss"
+          path: "scripts/chiaki-ngx.iss"
           options: /O+
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-win_arm64-VC-installer.zip
-          path: chiaki-ng-windows-installer.exe
+          name: chiaki-ngx-win_arm64-VC-installer.zip
+          path: chiaki-ngx-windows-installer.exe
           if-no-files-found: error
           retention-days: 7

@@ -565,6 +565,13 @@ DialogView {
                         }
 
                         Label {
+                            Layout.columnSpan: 3
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Bug reports: attach the matching chiaki_ngx_*.log (and .previous.log), chiaki_session_*.log and any *-crash.txt from the folder below. Include what happened, your GPU/driver and RTX/Eye Candy settings. Review logs before sharing; share crash dumps privately.")
+                        }
+
+                        Label {
                             Layout.alignment: Qt.AlignRight
                             text: qsTr("Log Directory:")
                         }
@@ -1036,8 +1043,7 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
-                        text: qsTr("Custom Renderer Settings")
-                        visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
+                        text: qsTr("Video renderer options")
                     }
 
                     C.Button {
@@ -1045,10 +1051,23 @@ DialogView {
                         text: qsTr("Open")
                         onClicked: root.showPlaceboSettingsDialog()
                         Material.roundedScale: Material.SmallScale
-                        visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
                     }
 
-                    Label { visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom }
+                    Label { }
+
+                    Label {
+                        visible: Chiaki.window.rtxSettingsSupported
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("RTX settings")
+                    }
+                    C.Button {
+                        objectName: "openRtxSettings"
+                        visible: Chiaki.window.rtxSettingsSupported
+                        text: qsTr("Open")
+                        onClicked: root.showRtxSettingsDialog()
+                        Material.roundedScale: Material.SmallScale
+                    }
+                    Label { visible: Chiaki.window.rtxSettingsSupported }
 
                     Label {
                         Layout.alignment: Qt.AlignRight
@@ -2408,6 +2427,22 @@ DialogView {
                                 }
                             }
                         }
+                        RtxSettingsShortcut {
+                            Layout.columnSpan: 3
+                            onCaptureRequested: { rendererKeyDialog.screenshotMode = false; rendererKeyDialog.open(); }
+                            onFocusRequested: (control) => keysFlick.ensureItemVisible(control)
+                        }
+                        RowLayout {
+                            Layout.columnSpan: 3
+                            Label { text: qsTr("Screenshot (during stream)") }
+                            C.Button {
+                                id: screenshotShortcutButton
+                                text: Chiaki.settings.screenshotShortcut
+                                onClicked: { rendererKeyDialog.screenshotMode = true; rendererKeyDialog.open(); }
+                                onActiveFocusChanged: if (activeFocus) keysFlick.ensureItemVisible(this)
+                            }
+                            C.Button { text: qsTr("Reset"); onClicked: Chiaki.settings.resetScreenshotShortcut() }
+                        }
                         Repeater {
                             id: chiakiKeys
                             model: Chiaki.settings.controllerMapping
@@ -3136,7 +3171,8 @@ DialogView {
                     Layout.preferredWidth: 400
                     verticalAlignment: Text.AlignTop
                     wrapMode: Text.Wrap
-                    text: "<h1>chiaki-ng</h1> by Street Pea, version %1
+                    text: "<h1>chiaki-ngx</h1> version %1
+                        <h2>Fork of chiaki-ng</h2> by Street Pea
                         <h2>Fork of Chiaki</h2> by Florian Markl at version 2.1.1
 
                         <p>This program is free software: you can redistribute it and/or modify
@@ -3147,6 +3183,34 @@ DialogView {
                         but WITHOUT ANY WARRANTY; without even the implied warranty of
                         MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
                         GNU General Public License for more details.</p>".arg(Qt.application.version)
+                }
+            }
+        }
+
+        Dialog {
+            id: rendererKeyDialog
+            property bool screenshotMode: false
+            parent: Overlay.overlay
+            anchors.centerIn: parent
+            title: screenshotMode ? qsTr("Screenshot shortcut") : qsTr("RTX settings shortcut")
+            modal: true
+            standardButtons: Dialog.Cancel
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+            onOpened: rendererKeyLabel.forceActiveFocus()
+            onClosed: screenshotMode ? screenshotShortcutButton.forceActiveFocus() : rendererShortcutButton.forceActiveFocus()
+            Label {
+                id: rendererKeyLabel
+                text: qsTr("Press a key combination. Escape cancels.")
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Escape) { rendererKeyDialog.close(); event.accepted = true; return; }
+                    if ([Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr, Qt.Key_unknown].indexOf(event.key) >= 0)
+                        return;
+                    if (rendererKeyDialog.screenshotMode)
+                        Chiaki.settings.captureScreenshotShortcut(event.key, event.modifiers);
+                    else
+                        Chiaki.settings.captureRendererShortcut(event.key, event.modifiers);
+                    event.accepted = true;
+                    rendererKeyDialog.close();
                 }
             }
         }

@@ -2,6 +2,7 @@
 
 #include "streamsession.h"
 #include "settings.h"
+#include "../enhancement/pipeline.h"
 
 #include <QMutex>
 #include <QAtomicInteger>
@@ -56,6 +57,17 @@ class DeferredSwapThread;
 class QmlMainWindow : public QWindow
 {
     Q_OBJECT
+    Q_PROPERTY(bool rtxSettingsSupported READ rtxSettingsSupported CONSTANT)
+    Q_PROPERTY(QString enhancementStatus READ enhancementStatus NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementApplying READ enhancementApplying NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementNeuralAvailable READ enhancementNeuralAvailable NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(QString enhancementCadence READ enhancementCadence NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(QString gameplayFps READ gameplayFps NOTIFY gameplayStatsChanged)
+    Q_PROPERTY(QString enhancementDimensions READ enhancementDimensions NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementUpscalingEligible READ enhancementUpscalingEligible NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementNrActive READ enhancementNrActive NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementFsrActive READ enhancementFsrActive NOTIFY enhancementStatusChanged)
+    Q_PROPERTY(bool enhancementFgActive READ enhancementFgActive NOTIFY enhancementStatusChanged)
     Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY hasVideoChanged)
     Q_PROPERTY(int droppedFrames READ droppedFrames NOTIFY droppedFramesChanged)
     Q_PROPERTY(bool keepVideo READ keepVideo WRITE setKeepVideo NOTIFY keepVideoChanged)
@@ -106,8 +118,21 @@ public:
     QmlMainWindow(const StreamSessionConnectInfo &connect_info);
     ~QmlMainWindow();
     void updateWindowType(WindowType type);
+    void startRendererDiagnostic();
     void setSettings(Settings *new_settings);
 
+    bool rtxSettingsSupported() const;
+    QString enhancementStatus() const { return enhancement_neural_available ? enhancement_status : tr("DLSS5 disabled: %1\n%2").arg(enhancement_neural_failure, enhancement_status); }
+    bool enhancementNeuralAvailable() const { return enhancement_neural_available; }
+    bool enhancementApplying() const { return enhancement_applying; }
+    QString enhancementCadence() const;
+    QString gameplayFps() const { return gameplay_fps; }
+    Q_INVOKABLE void requestScreenshot();
+    QString enhancementDimensions() const { return enhancement_dimensions; }
+    bool enhancementUpscalingEligible() const { return enhancement_upscaling_eligible; }
+    bool enhancementNrActive() const { return enhancement_nr_active; }
+    bool enhancementFsrActive() const { return enhancement_fsr_active; }
+    bool enhancementFgActive() const { return enhancement_fg_active; }
     bool hasVideo() const;
     int droppedFrames() const;
     void increaseDroppedFrames();
@@ -157,6 +182,7 @@ public:
     bool startupWarmupFrameActive() const { return startup_warmup_frame_active; }
 
 public slots:
+    void updateEnhancementSettings();
     void resetPlaceboQueue();
     void schedulePlaceboReset();
     void queuePlaceboReset(bool preserve_timeline);
@@ -170,6 +196,7 @@ public slots:
     AVBufferRef *vulkanHwDeviceCtx();
 
 signals:
+    void enhancementStatusChanged();
     void hasVideoChanged();
     void droppedFramesChanged();
     void keepVideoChanged();
@@ -177,6 +204,9 @@ signals:
     void zoomFactorChanged();
     void videoPresetChanged();
     void menuRequested();
+    void rendererSettingsRequested();
+    void screenshotSaved(QString path, bool success);
+    void gameplayStatsChanged();
     void directStreamChanged();
     void queueDepthAverageChanged();
     void pendingFrameAgeChanged();
@@ -184,6 +214,28 @@ signals:
     void statsOverlayActiveChanged();
 
 private:
+    EnhancementPipeline *enhancement_pipeline = nullptr; // render-thread owned
+    EnhancementOptions enhancement_options;
+    QAtomicInteger<int> renderer_diagnostic_active = 0;
+    QAtomicInteger<quint64> diagnostic_real_total = 0, diagnostic_fg_total = 0;
+    QAtomicInteger<int> enhancement_history_reset_requested = 0;
+    QAtomicInteger<int> screenshot_requested = 0;
+    QString gameplay_fps = QStringLiteral("0.0");
+    uint64_t gameplay_stats_since = 0, gameplay_last_real = 0, gameplay_last_fg = 0;
+    uint64_t gameplay_real_count = 0, gameplay_fg_count = 0;
+    void recordGameplayPresentation(bool generated, uint64_t frameKey);
+    QString enhancement_status = QStringLiteral("Inactive — not streaming");
+    QString enhancement_dimensions = QStringLiteral("Video dimensions available during streaming");
+    bool enhancement_upscaling_eligible = false;
+    bool enhancement_neural_available = true;
+    bool enhancement_applying = false;
+    QString enhancement_neural_failure;
+    QString enhancement_cadence = QStringLiteral("No enhanced frames presented");
+    bool enhancement_nr_active = false, enhancement_fsr_active = false, enhancement_fg_active = false;
+    int eye_candy_log_state = -1; // render-thread state-change logging only
+    uint64_t enhancement_direct_signature = 0, enhancement_last_signature = 0;
+    uint64_t enhancement_frame_id = 0, enhancement_input_timestamp = 0;
+    bool enhancement_seen_signature = false;
     friend class BufferedPlaybackPacerThread;
     friend class DeferredPresentPacerThread;
     friend class DeferredSwapThread;

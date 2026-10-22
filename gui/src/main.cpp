@@ -13,6 +13,7 @@
 int real_main(int argc, char *argv[]);
 int main(int argc, char *argv[]) { return real_main(argc, argv); }
 
+#include "../enhancement/diagnostics.h"
 #include <streamsession.h>
 #include <settings.h>
 #include <host.h>
@@ -40,6 +41,8 @@ int main(int argc, char *argv[]) { return real_main(argc, argv); }
 #include <QCommandLineParser>
 #include <QMap>
 #include <QSurfaceFormat>
+#include <QDir>
+#include <QTimer>
 
 Q_DECLARE_METATYPE(ChiakiLogLevel)
 Q_DECLARE_METATYPE(ChiakiRegistEventType)
@@ -76,7 +79,7 @@ int real_main(int argc, char *argv[])
 	QGuiApplication::setOrganizationName("Chiaki");
 	QGuiApplication::setApplicationName("Chiaki");
 	QGuiApplication::setApplicationVersion(CHIAKI_VERSION);
-	QGuiApplication::setApplicationDisplayName("chiaki-ng");
+	QGuiApplication::setApplicationDisplayName("chiaki-ngx");
 #if defined(Q_OS_MACOS)
 	qputenv("QT_MTL_NO_TRANSACTION", "1");
 #endif
@@ -85,7 +88,7 @@ int real_main(int argc, char *argv[])
 		QGuiApplication::setDesktopFileName(qEnvironmentVariable("FLATPAK_ID"));
 	else
 #endif
-		QGuiApplication::setDesktopFileName("chiaki-ng");
+		QGuiApplication::setDesktopFileName("chiaking"); // Match the installed .desktop filename.
 
 	qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu");
 #if defined(Q_OS_WIN)
@@ -104,26 +107,32 @@ int real_main(int argc, char *argv[])
 		qputenv("QT_IM_MODULE", "sdinput");
 #endif
 
-	ChiakiErrorCode err = chiaki_lib_init();
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		fprintf(stderr, "Chiaki lib init failed: %s\n", chiaki_error_string(err));
-		return 1;
-	}
-
-    SDL_SetHint(SDL_HINT_APP_NAME, "chiaki-ng");
-
-	if(SDL_Init(SDL_INIT_AUDIO) < 0)
-	{
-		fprintf(stderr, "SDL Audio init failed: %s\n", SDL_GetError());
-		return 1;
-	}
-
 	QGuiApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #ifdef CHIAKI_HAVE_WEBENGINE
 	QtWebEngineQuick::initialize();
 #endif
 	QApplication app(argc, argv);
+    QString diagnosticDirectory;
+    if (qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC"))
+        diagnosticDirectory = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC_ROOT") + "/logs";
+    if (!DiagnosticLog::initialize(diagnosticDirectory))
+        qWarning() << "[App][Log] Could not create the diagnostic log; check the log directory permissions.";
+
+	ChiakiErrorCode err = chiaki_lib_init();
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		qCritical() << "[App][Startup] Chiaki lib init failed:" << chiaki_error_string(err);
+		return 1;
+	}
+
+    SDL_SetHint(SDL_HINT_APP_NAME, "chiaki-ngx");
+
+	if(SDL_Init(SDL_INIT_AUDIO) < 0)
+	{
+		qCritical() << "[App][Audio] SDL Audio init failed:" << SDL_GetError();
+		return 1;
+	}
+
 
 #ifdef Q_OS_MACOS
 	QGuiApplication::setWindowIcon(QIcon(":/icons/chiaking_macos.svg"));
@@ -177,13 +186,19 @@ int real_main(int argc, char *argv[])
 	parser.process(app);
 	QStringList args = parser.positionalArguments();
 
+    if (qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC")) {
+        const QString root = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC_ROOT");
+        if (root.isEmpty() || !QDir::isAbsolutePath(root)) return 2;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, root + "/settings");
+    }
 	Settings settings(parser.isSet(profile_option) ? parser.value(profile_option) : QString());
 	bool exit_app_on_stream_exit = parser.isSet(stream_exit_option);
 	if(parser.isSet(profile_option))
 		settings.SetCurrentProfile(parser.value(profile_option));
 	Settings alt_settings(parser.isSet(profile_option) ? "" : settings.GetCurrentProfile());
 	if(!settings.GetCurrentProfile().isEmpty())
-		QGuiApplication::setApplicationDisplayName(QString("chiaki-ng:%1").arg(settings.GetCurrentProfile()));
+		QGuiApplication::setApplicationDisplayName(QString("chiaki-ngx:%1").arg(settings.GetCurrentProfile()));
 	bool use_alt_settings = false;
 	if(!parser.isSet(profile_option))
 		use_alt_settings = true;
@@ -317,9 +332,21 @@ int real_main(int argc, char *argv[])
 
 int RunMain(QGuiApplication &app, Settings *settings, bool exit_app_on_stream_exit)
 {
-	QmlMainWindow main_window(settings, exit_app_on_stream_exit);
-	main_window.show();
-	return app.exec();
+    const bool diagnostic = qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC");
+    if (diagnostic) {
+        const QString mode = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC");
+        settings->SetVSyncEnabled(false);
+        settings->SetDirectFrameMapping(!qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC_QUEUED"));
+        settings->SetEnhancementNeural(mode.contains("nr"));
+        settings->SetEnhancementFrameGeneration(mode.contains("fg"));
+        settings->SetEnhancementPercent(qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC_PERCENT") ? qEnvironmentVariableIntValue("CHIAKI_RENDER_DIAGNOSTIC_PERCENT") : 75);
+        settings->SetEnhancementFsr(true);
+    }
+    QmlMainWindow main_window(settings, exit_app_on_stream_exit);
+    if (diagnostic) main_window.setFlag(Qt::WindowDoesNotAcceptFocus);
+    main_window.show();
+    if (diagnostic) QTimer::singleShot(500, &main_window, [&main_window]() { main_window.startRendererDiagnostic(); });
+    return app.exec();
 }
 
 int RunStream(QGuiApplication &app, const StreamSessionConnectInfo &connect_info)

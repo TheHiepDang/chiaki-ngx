@@ -1,10 +1,10 @@
 # Contributor Guide
 
-This file is a quick orientation for new contributors working on `chiaki-ng`.
+This file is a quick orientation for new contributors working on `chiaki-ngx`.
 
 ## What This Repository Is
 
-`chiaki-ng` is a cross-platform PlayStation Remote Play client. The codebase is split into:
+`chiaki-ngx` is a cross-platform PlayStation Remote Play client. The codebase is split into:
 
 - shared protocol and codec code in [`lib/`](./lib)
 - desktop GUI code in [`gui/`](./gui)
@@ -177,3 +177,7 @@ If you are brand new, this order gives a decent map quickly:
 7. [`lib/src/audioreceiver.c`](./lib/src/audioreceiver.c)
 
 <!-- created by codex agent -->
+
+## Diagnostic logging convention
+
+Use stable subsystem tags for new feature logs: `[RTX]` for RTX/NR/FG/runtime/worker work, `[EyeCandy]` for video adjustments, `[Screenshot]` for captures, and `[App]` for application lifecycle. Add subtags for context; preserve severity, timestamps, redaction and bounded output. Record meaningful state changes, failures and recovery rather than per-frame noise. Keep the README bug-report section and log/crash headers current. See [project conventions](AGENTS.md) for the complete policy.

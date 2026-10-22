@@ -25,10 +25,10 @@ BEGIN
             VALUE "CompanyName", "Stret Pea"
             VALUE "FileDescription", "Open-Source PlayStation Remote Play App"
             VALUE "FileVersion", VER_FILEVERSION_STR
-            VALUE "InternalName", "chiaki-ng"
+            VALUE "InternalName", "chiaki-ngx"
             VALUE "LegalCopyright", "AGPLv3 Stret Pea 2022"
             VALUE "OriginalFilename", "chiaki.exe"
-            VALUE "ProductName", "chiaki-ng"
+            VALUE "ProductName", "chiaki-ngx"
             VALUE "ProductVersion", VER_PRODUCTVERSION_STR
         END
     END

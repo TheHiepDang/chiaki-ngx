@@ -108,6 +108,34 @@ Item {
         function onVisibilityChanged() { view.updateSeparateMenuGeometry() }
     }
 
+    ToolButton {
+        id: liveRendererButton
+        objectName: "liveRendererButton"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 12
+        visible: Chiaki.window.rtxSettingsSupported && Chiaki.session && !sessionLoading && !sessionError && !menuController.open && !menuController.closing
+        text: qsTr("RTX settings")
+        icon.source: "qrc:/icons/settings-20px.svg"
+        checkable: true
+        checked: root.rendererSettingsOpen
+        onClicked: root.toggleRendererSettings()
+        ToolTip.visible: hovered
+        ToolTip.text: qsTr("RTX settings (%1)").arg(Chiaki.settings.rendererShortcut)
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 100
+        visible: Chiaki.window.enhancementApplying && !view.sessionLoading && !view.sessionError
+        color: "#66000000"
+        ColumnLayout {
+            anchors.centerIn: parent
+            BusyIndicator { Layout.alignment: Qt.AlignHCenter; running: parent.parent.visible }
+            Label { text: qsTr("Applying settings…"); font.pixelSize: 24 }
+        }
+    }
+
     QtObject {
         id: menuController
         property bool closing: false
@@ -721,12 +749,7 @@ Item {
                 icon.source: "qrc:/icons/settings-20px.svg";
                 onClicked: root.openDisplaySettings()
                 KeyNavigation.left: customButton
-                KeyNavigation.right: {
-                    if(Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom)
-                        placeboSettingsButton;
-                    else
-                        displaySettingsButton;
-                }
+                KeyNavigation.right: Chiaki.window.rtxSettingsSupported ? placeboSettingsButton : null
                 Keys.onReturnPressed: {
                     menuController.close();
                     clicked();
@@ -736,13 +759,13 @@ Item {
 
             ToolButton {
                 id: placeboSettingsButton
-                text: qsTr("Placebo")
+                visible: Chiaki.window.rtxSettingsSupported
+                text: qsTr("RTX settings (%1)").arg(Chiaki.settings.rendererShortcut)
                 icon.source: "qrc:/icons/settings-20px.svg";
                 padding: 10
                 checkable: false
-                onClicked: root.openPlaceboSettings()
+                onClicked: { menuController.close(); root.openPlaceboSettings(); }
                 KeyNavigation.left: displaySettingsButton
-                visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
                 Keys.onReturnPressed: {
                     menuController.close();
                     clicked();
@@ -1277,6 +1300,13 @@ Item {
             } else if (Chiaki.session) {
                 sessionLoading = !(Chiaki.settings.audioVideoDisabled & 0x02);
             }
+        }
+
+        function onRendererSettingsRequested() {
+            if (sessionPinDialog.opened || sessionStopDialog.opened || separateSessionPinWindow.visible || separateSessionStopWindow.visible)
+                return;
+            menuController.close();
+            root.toggleRendererSettings();
         }
 
         function onMenuRequested() {

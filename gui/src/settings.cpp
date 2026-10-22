@@ -264,9 +264,9 @@ static void MigrateControllerMappings(QSettings *settings)
 
 Settings::Settings(const QString &conf, QObject *parent) : QObject(parent),
 	time_format("yyyy-MM-dd HH:mm:ss t"),
-	settings(QCoreApplication::organizationName(), conf.isEmpty() ? QCoreApplication::applicationName() : QStringLiteral("%1-%2").arg(QCoreApplication::applicationName(), conf)),
-	default_settings(QCoreApplication::organizationName(), QCoreApplication::applicationName()),
-	placebo_settings(QCoreApplication::organizationName(), QStringLiteral("pl_render_params"))
+	settings(QSettings::defaultFormat(), QSettings::UserScope, QCoreApplication::organizationName(), conf.isEmpty() ? QCoreApplication::applicationName() : QStringLiteral("%1-%2").arg(QCoreApplication::applicationName(), conf)),
+	default_settings(QSettings::defaultFormat(), QSettings::UserScope, QCoreApplication::organizationName(), QCoreApplication::applicationName()),
+	placebo_settings(QSettings::defaultFormat(), QSettings::UserScope, QCoreApplication::organizationName(), QStringLiteral("pl_render_params"))
 {
 	settings.setFallbacksEnabled(false);
 	MigrateSettings(&settings);

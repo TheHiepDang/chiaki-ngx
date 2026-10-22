@@ -1,5 +1,7 @@
 # Controller Configuration
 
+> The app is now chiaki-ngx. References to the exact `chiaki-ng` Steam name and artwork folders below are retained for compatibility with upstream community layouts and artwork.
+
 ## Configuring Steam Deck Controller Profile
 
 !!! Tip
@@ -17,15 +19,15 @@ Get all of the shortcuts mapped to Steam Deck controls. Start by going to the `c
 
 ### Retrieving chiaki-ng Controller Layouts when Using An Alternate Game Name [Most Users Can Skip This]
 
-???- Tip "Only If You Didn't Use `chiaki-ng` As the Name of the Game in Steam [Click to Open Me]"
+???- Tip "Only If You Didn't Use `chiaki-ngx` As the Name of the Game in Steam [Click to Open Me]"
 
-    1. Change the name of your game (i.e., `Playstation Launcher Thingamajig`) temporarily to `chiaki-ng`
+    1. Change the name of your game (i.e., `Playstation Launcher Thingamajig`) temporarily to `chiaki-ngx`
 
         1. Open the properties menu of `Playstation Launcher Thingamajig` (whatever you called it) by hitting the options button when selecting the game or the gear icon on the game page and selecting `Properties...` from the menu that pops up.
 
             ![Open Properties](images/OpenProperties.png)
 
-        2. Change the game name to `chiaki-ng`
+        2. Change the game name to `chiaki-ngx`
 
             ![Game Name Change](images/GameNameChange.jpg)
 
@@ -135,7 +137,7 @@ You can create your own controller profile by mapping the relevant buttons in St
 
 | Function | Button | Description                                                                 |
 | ---------|--------|-----------------------------------------------------------------------------|
-| `Quit`   |  ++ctrl+q++ | Close `chiaki-ng` cleanly, putting console in sleep mode if desired  |
+| `Quit`   |  ++ctrl+q++ | Close `chiaki-ngx` cleanly, putting console in sleep mode if desired  |
 | `Zoom`   |  ++ctrl+z++ | Toggle between zoom (zoomed in to eliminate borders, cutting off edge of screen) and non-zoom (black borders) |
 | `Stretch`| ++ctrl+s++  | Toggle between stretch (stretched to eliminate borders, distorting aspect ratio of image), and non-stretch (black borders with default aspect ratio) |
 | `Full Screen` | ++f11++ / `Double Click` | Toggle between full screen and regular mode (Note: Double click for fullscreen toggle needs to be enabled in video settings.)|
@@ -178,7 +180,7 @@ Gryo directly maps for games that support it (i.e., Concrete genie, Astro's Play
 
 - Steam Deck (works out of the box, nothing needed)
 - DualSense, DualShock4 or other controller with gyro + accelerometer supported by SDL
-    - disable Steam Input for the controller following [Using a DualSense and/or DualShock4 Controller with `chiaki-ng`](#using-a-dualsense-andor-dualshock4-controller-with-chiaki-ng) below
+    - disable Steam Input for the controller following [Using a DualSense and/or DualShock4 Controller with `chiaki-ngx`](#using-a-dualsense-andor-dualshock4-controller-with-chiaki-ngx) below
 
 Additionally, you can use gyro controls for camera options with any game by mapping gyro `As joystick` and adding a condition for when it's used (i.e., `On` with a condition of `right joystick touch`) in the gyro settings for `chiaki-ng`. I have done this in the [default `chiaki-ng` control setting](#default-chiaki-ng-layout-mapping-full-view) and you can do it in your custom control scheme. However, when playing games that have native gyro support (such as Concrete Genie or The Last of Us) you will most likely want to change the gyro mapping from `As joystick` to `None` so that gyro only maps to gyro in the game (i.e., you don't make your camera move when you're trying to shake your flashlight, etc.).
 
@@ -186,7 +188,7 @@ Additionally, you can use gyro controls for camera options with any game by mapp
 
 PlayStation 5 haptics are mapped for both the DualSense controller (usb connection required) and the Steam Deck controller and adaptive triggers are mapped for the DualSense controller (usb or bluetooth).
 
-If you are using a DualSense controller in Game mode on the Steam Deck or via Steam, you will also need to disable Steam Input for the controller when it's first plugged in following the "Turning off Steam Input" tab [here](#enabling-chiaki-ng-to-work-with-dualsense-dualshock-4){target="_blank" rel="noopener"}.
+If you are using a DualSense controller in Game mode on the Steam Deck or via Steam, you will also need to disable Steam Input for the controller when it's first plugged in following the "Turning off Steam Input" tab [here](#enabling-chiaki-ngx-to-work-with-dualsense-dualshock-4){target="_blank" rel="noopener"}.
 Once checked, haptics and adaptive triggers (DualSense only) will work in games that support them when streaming from a PlayStation 5. If the DualSense is plugged in via USB (either initially or plugged in during a gaming session), haptics will be directed to it. If you are using the Steam Deck and don't have a DualSense plugged in, haptics will be directed to it and played via the trackpads.
 
 ### Microphone
@@ -221,19 +223,19 @@ Unmute microphone with either ++ctrl+m++ or the mic button on the PlayStation co
 | `switch between dpad modes` | `L1+R1+dpad up`      |
 | `stream menu`    | `L1+R1+L3+R3`           |
 
-## Using a DualSense and/or DualShock4 Controller with `chiaki-ng`
+## Using a DualSense and/or DualShock4 Controller with `chiaki-ngx`
 
-While most users will want to just use `chiaki-ng` with the Steam Deck controller, you can also attach a DualShock 4 or DualSense controller via bluetooth or usbc. The controls will map automatically and there is even native touchpad (including gestures), gyro, haptics (DualSense via usb/usbc only), and adaptive triggers (DualSense only) support. This can be especially useful if you're playing `chiaki-ng` when connected to a dock using an external monitor or TV or if you just really like the feel of the traditional PlayStation controllers.
+While most users will want to just use `chiaki-ngx` with the Steam Deck controller, you can also attach a DualShock 4 or DualSense controller via bluetooth or usbc. The controls will map automatically and there is even native touchpad (including gestures), gyro, haptics (DualSense via usb/usbc only), and adaptive triggers (DualSense only) support. This can be especially useful if you're playing `chiaki-ngx` when connected to a dock using an external monitor or TV or if you just really like the feel of the traditional PlayStation controllers.
 
 !!! Tip "Pairing your DualShock 4 / DualSense with Steam Deck via Bluetooth"
 
     While holding the `Share` button, hold the `PlayStation Button` to put your controller into pairing mode. On the Steam Deck, hit the `STEAM` button and then select the `Settings` tab and then the `Bluetooth` tab (i.e., `STEAM button->Settings->Bluetooth`). Then, select your device from the list of devices. Once paired, it will automatically connect in the future when you press the `PlayStation` button on the controller.
 
-### Enabling `chiaki-ng` to Work with DualSense / DualShock 4
+### Enabling `chiaki-ngx` to Work with DualSense / DualShock 4
 
 !!! Info "Make Sure your Controller is Connected for Configuration"
 
-    Your PlayStation controller needs to be connected via bluetooth or usb cable for its tab to show up when you visit the `chiaki-ng` game page on your Steam Deck and edit the saved controller configuration. This configuration is specifically for your PlayStation controller and separate from the `Steam Deck` controller configuration for `chiaki-ng`. It will be activated automatically when you use the PlayStation controller with `chiaki-ng` (it will show up as a 2nd controller configuration since you will now have at least 2 active controllers [Steam Deck + PlayStation controller])
+    Your PlayStation controller needs to be connected via bluetooth or usb cable for its tab to show up when you visit the `chiaki-ngx` game page on your Steam Deck and edit the saved controller configuration. This configuration is specifically for your PlayStation controller and separate from the `Steam Deck` controller configuration for `chiaki-ngx`. It will be activated automatically when you use the PlayStation controller with `chiaki-ngx` (it will show up as a 2nd controller configuration since you will now have at least 2 active controllers [Steam Deck + PlayStation controller])
 
 === "Turning off Steam Input (Recommended)"
 
@@ -245,13 +247,13 @@ While most users will want to just use `chiaki-ng` with the Steam Deck controlle
     2. Adaptive triggers (DualSense only, USB or bluetooth)
     3. Gyro controls for games like Concrete Genie and Astro's Playroom (any controller SDL supports for gyro + accelerometer)
 
-    !!! Warning "Won't Have Access to All `chiaki-ng` controls"
+    !!! Warning "Won't Have Access to All `chiaki-ngx` controls"
 
-        With this option you won't have access to all of the shortcuts for `chiaki-ng` (toggling `stretch` ++ctrl+s++ and `zoom` ++ctrl+z++ screen options and quitting gracefully ++ctrl+q++) on your DualSense. However, if you have a keyboard connected to your Steam Deck, you can always use that for those shortcuts.
+        With this option you won't have access to all of the shortcuts for `chiaki-ngx` (toggling `stretch` ++ctrl+s++ and `zoom` ++ctrl+z++ screen options and quitting gracefully ++ctrl+q++) on your DualSense. However, if you have a keyboard connected to your Steam Deck, you can always use that for those shortcuts.
 
     Turn off Steam Input for your PlayStation controller by doing the following:
     
-    1. Go to the `chiaki-ng` game page
+    1. Go to the `chiaki-ngx` game page
 
     2. Select the gamepad icon on the right hand side of the page to go the controller configuration menu
 
@@ -265,9 +267,9 @@ While most users will want to just use `chiaki-ng` with the Steam Deck controlle
 
         ![Disable Steam Input](images/DisableSteamInput.jpg)
 
-=== "Mapping All `chiaki-ng` Controls (Alternative Option)"
+=== "Mapping All `chiaki-ngx` Controls (Alternative Option)"
 
-    This tab shows you how to use Steam Input to map all of the controls for `chiaki-ng` to your PlayStation controller. This is great if you are using `chiaki-ng` with a TV. Since the PS Button maps to the `STEAM` button automatically and there are several commands in the default `chiaki-ng` configuration bound to back buttons (that don't exist on the PlayStation controllers), I have added these controls to a touch menu. It will show up when touching the left pad of the `chiaki-ng` controller. You have to click to select one of the extra commands (so you don't accidentally choose one during gameplay) from the radial menu. See the picture below for an example of what this looks like in-game:
+    This tab shows you how to use Steam Input to map all of the controls for `chiaki-ngx` to your PlayStation controller. This is great if you are using `chiaki-ngx` with a TV. Since the PS Button maps to the `STEAM` button automatically and there are several commands in the default `chiaki-ngx` configuration bound to back buttons (that don't exist on the PlayStation controllers), I have added these controls to a touch menu. It will show up when touching the left pad of the `chiaki-ngx` controller. You have to click to select one of the extra commands (so you don't accidentally choose one during gameplay) from the radial menu. See the picture below for an example of what this looks like in-game:
 
     ![DualSense GoT Steam Input](images/GhostOfTsushimaSteamDualsense.jpg)
 
@@ -279,7 +281,7 @@ While most users will want to just use `chiaki-ng` with the Steam Deck controlle
 
     ???+ example "Add Default PlayStation Controller Mapping"
 
-        1. Go to the `chiaki-ng` game page
+        1. Go to the `chiaki-ngx` game page
 
         2. Select the gamepad icon on the right hand side of the page to go the controller configuration menu
 
@@ -319,15 +321,15 @@ In order to enable DualSense haptics on MacOS please do the following:
 
     ![Select Quadrophonic audio](images/configure_quadrophonic.png)
 
-7. Play your favorite PS5 game with haptic feedback on Mac via `chiaki-ng`!
+7. Play your favorite PS5 game with haptic feedback on Mac via `chiaki-ngx`!
 
-## Using a non-PlayStation controller with chiaki-ng
+## Using a non-PlayStation controller with chiaki-ngx
 
 ### Controller Mapping
 
 #### Change Controller Mapping
 
-You can re-map all necessary PlayStation buttons to your controller using the controller mapper built-in to `chiaki-ng`.
+You can re-map all necessary PlayStation buttons to your controller using the controller mapper built-in to `chiaki-ngx`.
 
 1. Go to Settings->Controllers and select `Change Controller Mapping`
 
@@ -351,7 +353,7 @@ You can reset a controller mapping for a controller back to default at any time
 
 ### Dpad Touch Emulation
 
-Non-PlayStation controllers such as Xbox and Nintendo controllers don't have a touchpad. To use touchpad functionality in games, chiaki-ng provides dpad touch emulation. It is enabled by default in Settings->Controllers and can be disabled at any time. The `Dpad Touch Increment` controls how far away the next touch on the dpad will be when holding down a direction on the dpad. Changing this will make you "move across the touchpad" (in the currently pressed dpad direction) farther or nearer to your current position.
+Non-PlayStation controllers such as Xbox and Nintendo controllers don't have a touchpad. To use touchpad functionality in games, chiaki-ngx provides dpad touch emulation. It is enabled by default in Settings->Controllers and can be disabled at any time. The `Dpad Touch Increment` controls how far away the next touch on the dpad will be when holding down a direction on the dpad. Changing this will make you "move across the touchpad" (in the currently pressed dpad direction) farther or nearer to your current position.
 
 #### Switching Dpad Mode
 

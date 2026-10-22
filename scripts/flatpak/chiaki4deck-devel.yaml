@@ -469,12 +469,12 @@ modules:
     post-install:
       - mv /app/lib/pkgconfig/sdl2-compat.pc /app/lib/pkgconfig/sdl2.pc
 
-  - name: chiaki-ng
+  - name: chiaki-ngx
     buildsystem: cmake-ninja
     builddir: true
     sources:
       - type: git
-        url: https://github.com/streetpea/chiaki-ng.git
+        url: https://github.com/TheHiepDang/chiaki-ngx.git
         branch: main
     post-install:
       - "install -Dm755 ../scripts/psn-account-id.py /app/bin/psn-account-id"

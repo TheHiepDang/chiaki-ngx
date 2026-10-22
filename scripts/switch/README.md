@@ -1,4 +1,4 @@
-# WARNING! Switch version has not fully implemented all new features avaliable in chiaki-ng repo
+# WARNING! Switch version has not fully implemented all new features avaliable in chiaki-ngx repo
 
 If you ended up here, then you are trying to compile it. if you are trying to compile it, you will essentially end up with the same as existing chiaki.nro
 

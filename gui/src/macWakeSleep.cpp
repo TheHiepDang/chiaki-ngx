@@ -133,7 +133,7 @@ void MacWakeSleep::simulateUserActivity()
 {
     IOPMAssertionID id = 0;
     IOReturn rc = 0;
-    rc = IOPMAssertionDeclareUserActivity(CFSTR("chiaki-ng controller input"), kIOPMUserActiveLocal, &id);
+    rc = IOPMAssertionDeclareUserActivity(CFSTR("chiaki-ngx controller input"), kIOPMUserActiveLocal, &id);
     if(rc == kIOReturnSuccess)
         qCDebug(chiakiGui) << "Successfully sent controller activity to MacOS with ID:" << id;
     else

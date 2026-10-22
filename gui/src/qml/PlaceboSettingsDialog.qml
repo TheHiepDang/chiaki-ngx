@@ -11,8 +11,17 @@ import "controls" as C
 
 DialogView {
     id: dialog
+    readonly property bool customRenderer: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
     property string options_url: ""
-    title: qsTr("Placebo Renderer Settings")
+    function showEnhancements() { bar.currentIndex = Chiaki.window.rtxSettingsSupported ? 8 : 9; }
+    function stepTab(direction) {
+        for (let i = 1; i <= bar.count; ++i) {
+            const next = (bar.currentIndex + direction * i + bar.count) % bar.count;
+            const item = bar.itemAt(next);
+            if (item && item.visible && item.enabled) { bar.currentIndex = next; return; }
+        }
+    }
+    title: qsTr("Video renderer options")
     header: qsTr("* Defaults in () to right of value or marked with (Default)")
     buttonVisible: false
     Keys.onPressed: (event) => {
@@ -20,11 +29,11 @@ DialogView {
             return;
         switch (event.key) {
         case Qt.Key_PageUp:
-            bar.decrementCurrentIndex();
+            dialog.stepTab(-1);
             event.accepted = true;
             break;
         case Qt.Key_PageDown:
-            bar.incrementCurrentIndex();
+            dialog.stepTab(1);
             event.accepted = true;
             break;
         }
@@ -33,6 +42,7 @@ DialogView {
     Item {
         TabBar {
             id: bar
+            currentIndex: dialog.customRenderer ? 0 : (Chiaki.window.rtxSettingsSupported ? 8 : 9)
             anchors {
                 top: parent.top
                 left: parent.left
@@ -43,42 +53,58 @@ DialogView {
             TabButton {
                 text: qsTr("Config")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Scaling")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Deinterlace")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Debanding")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Sigmoidization")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Color")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Peak Detection")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
 
             TabButton {
                 text: qsTr("Color Mapping")
                 focusPolicy: Qt.NoFocus
+                enabled: dialog.customRenderer
             }
+            TabButton {
+                text: qsTr("RTX settings")
+                visible: Chiaki.window.rtxSettingsSupported
+                enabled: Chiaki.window.rtxSettingsSupported
+                width: visible ? implicitWidth : 0
+                focusPolicy: Qt.NoFocus
+            }
+            TabButton { text: qsTr("Eye Candy"); focusPolicy: Qt.NoFocus }
         }
 
         StackLayout {
@@ -1187,6 +1213,8 @@ DialogView {
                     }
                 }
             }
+            EnhancementSettings { enabled: Chiaki.window.rtxSettingsSupported }
+            EyeCandySettings { }
         }
     }
 }

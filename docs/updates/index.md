@@ -1,3 +1,5 @@
+> Inherited upstream chiaki-ng history and plans. Current chiaki-ngx features and status are documented in docs/diy/enhancements.md and docs/diy/gameplay-capture-findings.md.
+
 # `chiaki-ng` Updates
 
 This section covers the updates to Chiaki in `chiaki-ng`. Information about each release and how to update is in the [Releases Section](releases.md){target="_blank" rel="noopener"}. Updates that are currently done (implemented) are listed in the [Done section](done.md){target="_blank" rel="noopener"} along with details, while updates that are planned for the future are listed in the [Planned section](planned.md){target="_blank" rel="noopener"}.

@@ -1,4 +1,6 @@
 #include "qmlbackend.h"
+#include "../enhancement/diagnostics.h"
+#include <cstdio>
 #include "qmlsettings.h"
 #include "qmlmainwindow.h"
 #include "streamsession.h"
@@ -225,9 +227,11 @@ static void msg_handler(QtMsgType type, const QMessageLogContext &context, const
 {
     QMutexLocker lock(&chiaki_log_mutex);
     if (!chiaki_log_ctx) {
-        qt_msg_handler(type, context, msg);
+        if (qt_msg_handler) qt_msg_handler(type, context, msg);
+        else std::fprintf(stderr, "%s\n", qPrintable(DiagnosticLog::taggedMessage(msg)));
         return;
     }
+    DiagnosticLog::record(type, msg);
     ChiakiLogLevel chiaki_level;
     switch (type) {
     case QtDebugMsg:
@@ -246,7 +250,7 @@ static void msg_handler(QtMsgType type, const QMessageLogContext &context, const
         chiaki_level = CHIAKI_LOG_ERROR;
         break;
     }
-    chiaki_log(chiaki_log_ctx, chiaki_level, "%s", qPrintable(msg));
+    chiaki_log(chiaki_log_ctx, chiaki_level, "%s", qPrintable(DiagnosticLog::taggedMessage(msg)));
 }
 
 QmlRegist::QmlRegist(const ChiakiRegistInfo &regist_info, uint32_t log_mask, QObject *parent)
@@ -311,6 +315,8 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     setConnectState(PsnConnectState::NotStarted);
     connect(settings_qml, &QmlSettings::audioVolumeChanged, this, &QmlBackend::updateAudioVolume);
     connect(settings_qml, &QmlSettings::placeboChanged, window, &QmlMainWindow::updatePlacebo);
+    connect(settings_qml, &QmlSettings::eyeCandyChanged, window, &QmlMainWindow::requestOverlayUpdate);
+    connect(settings_qml, &QmlSettings::enhancementChanged, window, &QmlMainWindow::updateEnhancementSettings);
         connect(settings_qml,
             &QmlSettings::vSyncEnabledChanged,
             window,

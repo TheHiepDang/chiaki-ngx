@@ -1,11 +1,11 @@
-name: Build chiaki-ng Appimage x86_64
+name: Build chiaki-ngx Appimage x86_64
 
 on:
   workflow_dispatch:
 
 jobs:
   build-appimage_x64:
-    name: Build chiaki-ng appimage_x64
+    name: Build chiaki-ngx appimage_x64
     runs-on: ubuntu-latest
     
     steps:
@@ -18,15 +18,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-          path: 'chiaki-ng'
+          path: 'chiaki-ngx'
 
       - name: Add QmlWebEngine Import
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           cp scripts/qtwebengine_import.qml gui/src/qml/
   
       - name: Run build script
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           set -xe
           podman run --rm \
@@ -38,10 +38,10 @@ jobs:
             /bin/bash -c "sudo -E scripts/build-appimage.sh /build/appdir"
           
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng.AppImage_x86_64
-          path: chiaki-ng/appimage/chiaki-ng.AppImage
+          name: chiaki-ngx.AppImage_x86_64
+          path: chiaki-ngx/appimage/chiaki-ngx.AppImage
           if-no-files-found: error
           retention-days: 7

@@ -60,6 +60,24 @@ QmlSettings::QmlSettings(Settings *settings, QObject *parent)
     : QObject(parent)
     , settings(settings)
 {
+    diagnostic_settings_timer.setSingleShot(true);
+    diagnostic_settings_timer.setInterval(750);
+    connect(&diagnostic_settings_timer, &QTimer::timeout, this, &QmlSettings::logDiagnosticSettings);
+    connect(this, &QmlSettings::enhancementChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::eyeCandyChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentEnabledChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentPresetChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentBrightnessChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentContrastChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentSaturationChanged, this, [this] { diagnostic_settings_timer.start(); });
+    connect(this, &QmlSettings::placeboColorAdjustmentGammaChanged, this, [this] { diagnostic_settings_timer.start(); });
+    diagnostic_settings_timer.start(0);
+    enhancement_percent_timer.setSingleShot(true);
+    enhancement_percent_timer.setTimerType(Qt::PreciseTimer);
+    enhancement_percent_timer.setInterval(3000);
+    connect(&enhancement_percent_timer, &QTimer::timeout, this, [this]() {
+        setEnhancementPercent(enhancement_percent_preview);
+    });
     if (settings->GetLogVerbose())
         QLoggingCategory::setFilterRules(QStringLiteral("chiaki.gui.debug=true"));
 
@@ -1679,6 +1697,8 @@ QString QmlSettings::logDirectory() const
 void QmlSettings::clearKeyMapping()
 {
     settings->ClearKeyMapping();
+    resetRendererShortcut();
+    resetScreenshotShortcut();
     emit controllerMappingChanged();
 }
 
@@ -1870,6 +1890,8 @@ QString QmlSettings::changeControllerKey(int button, int key)
 
 void QmlSettings::setSettings(Settings *new_settings)
 {
+    enhancement_percent_timer.stop();
+    enhancement_percent_preview = -1;
     settings = new_settings;
     connect(settings, &Settings::RegisteredHostsUpdated, this, &QmlSettings::registeredHostsChanged);
     connect(settings, &Settings::ProfilesUpdated, this, &QmlSettings::profilesChanged);
@@ -1878,6 +1900,11 @@ void QmlSettings::setSettings(Settings *new_settings)
 
 void QmlSettings::refreshAllKeys()
 {
+    emit eyeCandyChanged();
+    enhancement_percent_timer.stop();
+    enhancement_percent_preview = -1;
+    emit enhancementPercentPreviewChanged();
+    emit enhancementChanged();
     emit remotePlayAskChanged();
     emit addSteamShortcutAskChanged();
     emit hideCursorChanged();
@@ -1936,6 +1963,10 @@ void QmlSettings::refreshAllKeys()
     emit customResolutionHeightChanged();
     emit sZoomFactorChanged();
     emit videoPresetChanged();
+    qInfo().noquote() << "[RTX][Shortcut] binding=" << rendererShortcut();
+    emit rendererShortcutChanged();
+    qInfo().noquote() << "[Screenshot][Shortcut] binding=" << screenshotShortcut();
+    emit screenshotShortcutChanged();
     emit rendererBackendChanged();
     emit vulkanDeferredSwapChanged();
     emit autoConnectMacChanged();
@@ -2043,7 +2074,7 @@ void QmlSettings::exportSettings()
     if(profile.isEmpty())
         profile = "Default";
     QString fileName = QFileDialog::getSaveFileName(QApplication::focusWidget(), tr("Export %1 Profile To File").arg(profile),
-                                                    QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/chiaki-ng-" + profile,
+                                                    QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/chiaki-ngx-" + profile,
                                                     tr("Settings files (*.ini)"),
                                                     nullptr,
                                                     QFileDialog::DontUseNativeDialog | QFileDialog::DontConfirmOverwrite);
@@ -2077,7 +2108,7 @@ QString QmlSettings::chooseSteamBasePath()
 void QmlSettings::exportPlaceboSettings()
 {
     QString fileName = QFileDialog::getSaveFileName(QApplication::focusWidget(), tr("Export Placebo Renderer Settings To File"),
-                                                    QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/chiaki-ng-placebo",
+                                                    QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/chiaki-ngx-placebo",
                                                     tr("Settings files (*.ini)"),
                                                     nullptr,
                                                     QFileDialog::DontUseNativeDialog | QFileDialog::DontConfirmOverwrite);
@@ -2097,4 +2128,93 @@ void QmlSettings::importPlaceboSettings()
         return;
     settings->ImportPlaceboSettings(std::move(fileName));;
     refreshAllPlaceboKeys();
+}
+
+bool QmlSettings::enhancementNeural() const { return settings->GetEnhancementNeural(); }
+int QmlSettings::eyeCandyExposure() const { return settings->GetEyeCandyExposure(); }
+void QmlSettings::setEyeCandyExposure(int value) { settings->SetEyeCandyExposure(value); emit eyeCandyChanged(); }
+int QmlSettings::eyeCandyDarkArea() const { return settings->GetEyeCandyDarkArea(); }
+void QmlSettings::setEyeCandyDarkArea(int value) { settings->SetEyeCandyDarkArea(value); emit eyeCandyChanged(); }
+void QmlSettings::setEnhancementNeural(bool value) { settings->SetEnhancementNeural(value); emit enhancementChanged(); }
+int QmlSettings::enhancementPercent() const { return settings->GetEnhancementPercent(); }
+void QmlSettings::setEnhancementPercent(int value)
+{
+    enhancement_percent_timer.stop();
+    enhancement_percent_preview = -1;
+    if (settings->GetEnhancementPercent() != qBound(50, value, 100)) {
+        qInfo() << "[RTX][NRResolution] committed_percent=" << qBound(50, value, 100);
+        settings->SetEnhancementPercent(value);
+        emit enhancementChanged();
+    }
+    emit enhancementPercentPreviewChanged();
+}
+int QmlSettings::enhancementPercentPreview() const
+{
+    return enhancement_percent_preview < 0 ? enhancementPercent() : enhancement_percent_preview;
+}
+void QmlSettings::queueEnhancementPercent(int value)
+{
+    if (!enhancement_percent_timer.isActive()) qInfo() << "[RTX][NRResolution] adjustment started; applies after 3000 ms idle";
+    enhancement_percent_preview = qBound(50, value, 100);
+    enhancement_percent_timer.start();
+    emit enhancementPercentPreviewChanged();
+}
+bool QmlSettings::enhancementFsr() const { return settings->GetEnhancementFsr(); }
+void QmlSettings::setEnhancementFsr(bool value) { settings->SetEnhancementFsr(value); emit enhancementChanged(); }
+int QmlSettings::enhancementSharpness() const { return settings->GetEnhancementSharpness(); }
+void QmlSettings::setEnhancementSharpness(int value) { settings->SetEnhancementSharpness(value); emit enhancementChanged(); }
+bool QmlSettings::enhancementFrameGeneration() const { return settings->GetEnhancementFrameGeneration(); }
+void QmlSettings::setEnhancementFrameGeneration(bool value) { settings->SetEnhancementFrameGeneration(value); emit enhancementChanged(); }
+
+QString QmlSettings::rendererShortcut() const
+{
+    return settings->GetRendererShortcut();
+}
+void QmlSettings::captureRendererShortcut(int key, int modifiers)
+{
+    if (key == Qt::Key_unknown || key == Qt::Key_Control || key == Qt::Key_Shift ||
+        key == Qt::Key_Alt || key == Qt::Key_Meta || key == Qt::Key_AltGr)
+        return;
+    const auto mods = Qt::KeyboardModifiers(modifiers) &
+        (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+    const QKeySequence sequence(QKeyCombination(mods, Qt::Key(key)));
+    settings->SetRendererShortcut(sequence.toString(QKeySequence::PortableText));
+    qInfo().noquote() << "[RTX][Shortcut] binding=" << rendererShortcut();
+    emit rendererShortcutChanged();
+}
+void QmlSettings::resetRendererShortcut()
+{
+    settings->SetRendererShortcut(QStringLiteral("Ctrl+Shift+F"));
+    qInfo().noquote() << "[RTX][Shortcut] binding=" << rendererShortcut();
+    emit rendererShortcutChanged();
+}
+
+QString QmlSettings::screenshotShortcut() const { return settings->GetScreenshotShortcut(); }
+void QmlSettings::captureScreenshotShortcut(int key, int modifiers)
+{
+    if (key == Qt::Key_unknown || key == Qt::Key_Control || key == Qt::Key_Shift ||
+        key == Qt::Key_Alt || key == Qt::Key_Meta || key == Qt::Key_AltGr) return;
+    const auto mods = Qt::KeyboardModifiers(modifiers) &
+        (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+    settings->SetScreenshotShortcut(QKeySequence(QKeyCombination(mods, Qt::Key(key))).toString(QKeySequence::PortableText));
+    qInfo().noquote() << "[Screenshot][Shortcut] binding=" << screenshotShortcut();
+    emit screenshotShortcutChanged();
+}
+void QmlSettings::resetScreenshotShortcut()
+{
+    settings->SetScreenshotShortcut(QStringLiteral("F4"));
+    qInfo().noquote() << "[Screenshot][Shortcut] binding=" << screenshotShortcut();
+    emit screenshotShortcutChanged();
+}
+
+void QmlSettings::logDiagnosticSettings()
+{
+    qInfo().nospace() << "[RTX][Config] nr=" << enhancementNeural() << " scale=" << enhancementPercent()
+        << " fsr=" << enhancementFsr() << " sharpness=" << enhancementSharpness()
+        << " fg=" << enhancementFrameGeneration();
+    qInfo().nospace() << "[EyeCandy][Config] enabled=" << placeboColorAdjustmentEnabled()
+        << " eye_preset=" << placeboColorAdjustmentPreset() << " brightness=" << placeboColorAdjustmentBrightness()
+        << " contrast=" << placeboColorAdjustmentContrast() << " saturation=" << placeboColorAdjustmentSaturation()
+        << " gamma=" << placeboColorAdjustmentGamma() << " exposure_ev=" << eyeCandyExposure()/100.0
+        << " dark_area_ev=" << eyeCandyDarkArea()/100.0;
 }

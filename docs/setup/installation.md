@@ -1,4 +1,6 @@
-# Installing `chiaki-ng`
+# Installing `chiaki-ngx`
+
+> Package-store instructions inherited below install upstream chiaki-ng. For chiaki-ngx, build from this repository using [the current build guide](../diy/enhancements.md).
 
 === "Linux Flatpak"
 
@@ -12,9 +14,9 @@
 
             ![Open Discover](images/OpenDiscover.png)
 
-        2. Search for `chiaki-ng` in the search bar
+        2. Search for `chiaki-ngx` in the search bar
 
-            ![Install chiaki-ng](images/InstallChiaking.png)
+            ![Install chiaki-ngx](images/InstallChiaking.png)
 
         3. Click Install
 
@@ -26,9 +28,9 @@
             flatpak install -y io.github.streetpea.Chiaki4deck
             ```
 
-    !!! Note "About `chiaki-ng`"
+    !!! Note "About `chiaki-ngx`"
 
-        The above instructions are for the official `chiaki-ng` flatpak on Flathub.
+        The above instructions are for the official `chiaki-ngx` flatpak on Flathub.
         
         However, you can also build the flatpak yourself (recommended for users who want to add their own source code changes on top of the ones I've made) by following the instructions in [Building the flatpak yourself](../diy/buildit.md){target="_blank" rel="noopener"}.
 

@@ -44,6 +44,11 @@ set(SOURCE_FILES
 	src/qml/qml.qrc
 	include/qmlmainwindow.h
 	src/qmlmainwindow.cpp
+    enhancement/diagnostics.h
+    enhancement/diagnostics.cpp
+    enhancement/crash_dump_win.h
+    enhancement/pipeline.h
+    enhancement/pipeline.cpp
 	include/qmlbackend.h
 	src/qmlbackend.cpp
 	include/qmlcontroller.h
@@ -146,7 +151,7 @@ endif()
 set_target_properties(chiaki PROPERTIES
 		MACOSX_BUNDLE TRUE
 		MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/MacOSXBundleInfo.plist.in"
-		MACOSX_BUNDLE_BUNDLE_NAME chiaki-ng
+		MACOSX_BUNDLE_BUNDLE_NAME chiaki-ngx
 		MACOSX_BUNDLE_BUNDLE_VERSION ${CHIAKI_VERSION}
 		MACOSX_BUNDLE_COPYRIGHT "thestr4ng3r (AGPLv3)"
 		MACOSX_BUNDLE_GUI_IDENTIFIER "org.streetpea.chiaking"

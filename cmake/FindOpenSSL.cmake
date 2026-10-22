@@ -1,4 +1,4 @@
-# Custom FindOpenSSL module for chiaki-ng
+# Custom FindOpenSSL module for chiaki-ngx
 #
 # When OpenSSL is built as a CMake ExternalProject (CHIAKI_LIB_OPENSSL_EXTERNAL_PROJECT),
 # the standard FindOpenSSL.cmake cannot find the libraries because they don't exist yet

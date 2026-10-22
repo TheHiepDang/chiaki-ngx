@@ -1,4 +1,4 @@
-# Copilot Instructions for chiaki-ng
+# Copilot Instructions for chiaki-ngx
 
 ## Big picture
 - `lib/` is the core Remote Play protocol implementation in C (session, discovery, stream/control, crypto, FEC, audio/video decode hooks). Most feature work should start here.
@@ -41,3 +41,6 @@
 - Prefer editing first-party code under `lib/`, `gui/`, `cli/`, `test/`, `cmake/`, `scripts/`.
 - Avoid broad edits in vendored trees unless explicitly required: `third-party/`, `ffmpeg/`, `SDL2-*`, `sdl2-compat-*`, `switch/borealis/`.
 - If you change build options or dependencies, update the relevant workflow/script/docs file in the same PR.
+## Diagnostic logging convention
+
+Use stable subsystem tags for new feature logs: `[RTX]` for RTX/NR/FG/runtime/worker work, `[EyeCandy]` for video adjustments, `[Screenshot]` for captures, and `[App]` for application lifecycle. Add subtags for context; preserve severity, timestamps, redaction and bounded output. Record meaningful state changes, failures and recovery rather than per-frame noise. Keep the README bug-report section and log/crash headers current. See [project conventions](../AGENTS.md) for the complete policy.

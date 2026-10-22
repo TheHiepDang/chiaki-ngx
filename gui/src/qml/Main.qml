@@ -9,6 +9,8 @@ Item {
     id: root
     property list<Item> restoreFocusItems
     property bool initialAsk: false
+    readonly property bool liveRtxSettings: Chiaki.session && Chiaki.window.rtxSettingsSupported
+    readonly property bool rendererSettingsOpen: placeboSettingsRect.opacity > 0
     readonly property bool preferSeparateStreamSettingsWindows: Chiaki.window.runtimeRendererBackend === 1 && Chiaki.session
     property bool useSeparateStreamSettingsWindows: false
     Material.theme: Material.Dark
@@ -64,6 +66,16 @@ Item {
             }
         }
     }
+    function toggleRendererSettings() {
+        if (!Chiaki.session || !Chiaki.window.rtxSettingsSupported)
+            return;
+        if (placeboSettingsRect.opacity)
+            closeDialog();
+        else
+            openPlaceboSettings();
+        Chiaki.window.requestOverlayUpdate();
+    }
+
     function openPlaceboSettings() {
         if (!displaySettingsRect.opacity && !placeboSettingsRect.opacity && !colorMappingSettingsRect.opacity)
             useSeparateStreamSettingsWindows = preferSeparateStreamSettingsWindows;
@@ -72,16 +84,21 @@ Item {
         {
             if(placeboSettingsRect.opacity || displaySettingsRect.opacity || colorMappingSettingsRect.opacity)
                 closeDialog();
-            placeboSettingsRect.opacity = 0.8;
+            if (loader.item.showEnhancements)
+                loader.item.showEnhancements();
+            placeboSettingsRect.opacity = 1.0;
             grabInput(loader);
-            if (!loader.item.restoreFocusItem) {
-                let item = loader.item.mainItem.nextItemInFocusChain();
-                if (item)
-                    item.forceActiveFocus(Qt.TabFocusReason);
+            if (!loader.item.restoreFocusItem || !loader.item.restoreFocusItem.visible || !loader.item.restoreFocusItem.enabled) {
+                if (loader.item.focusInitialItem) {
+                    loader.item.focusInitialItem();
+                } else {
+                    let item = loader.item.mainItem.nextItemInFocusChain();
+                    if (item) item.forceActiveFocus(Qt.TabFocusReason);
+                }
             } else {
                 loader.item.restoreFocusItem.forceActiveFocus(Qt.TabFocusReason);
-                loader.item.restoreFocusItem = null;
             }
+            loader.item.restoreFocusItem = null;
         }
     }
 
@@ -160,6 +177,23 @@ Item {
         confirmDialog.open();
     }
 
+    Connections {
+        target: Chiaki.window
+        function onScreenshotSaved(path, success) {
+            errorTitleLabel.text = success ? qsTr("Screenshot saved") : qsTr("Screenshot failed");
+            errorTextLabel.text = path;
+            errorHideTimer.restart();
+            Chiaki.window.requestOverlayUpdate();
+        }
+    }
+
+    function showEnhancementWarning(reason) {
+        infoDialog.holdsStreamInput = true;
+        grabInput(infoDialog);
+        showInfoDialog(qsTr("DLSS5 disabled for this stream"),
+            qsTr("DLSS5 could not run on this GPU with the current runtime. It has been disabled for this stream. Ordinary playback remains available.\n\n%1").arg(reason));
+    }
+
     function showInfoDialog(title, text) {
         infoDialog.title = title;
         infoDialog.text = text;
@@ -169,7 +203,7 @@ Item {
 
     function showRendererFallbackDialog(reason) {
         showInfoDialog(qsTr("Renderer Fallback"),
-                       qsTr("Vulkan renderer is unavailable and chiaki-ng switched to OpenGL.\n\nReason: %1").arg(reason));
+                       qsTr("Vulkan renderer is unavailable and chiaki-ngx switched to OpenGL.\n\nReason: %1").arg(reason));
     }
 
     function showRemindDialog(title, text, remotePlay, callback) {
@@ -192,6 +226,14 @@ Item {
 
     function showDisplaySettingsDialog() {
         stack.push(displaySettingsDialogComponent);
+    }
+
+    function showRtxSettingsDialog() {
+        if (!Chiaki.window.rtxSettingsSupported)
+            return;
+        const settingsDialog = stack.push(placeboSettingsDialogComponent);
+        if (settingsDialog)
+            settingsDialog.showEnhancements();
     }
 
     function showPlaceboSettingsDialog() {
@@ -284,15 +326,16 @@ Item {
         id: placeboSettingsRect
         opacity: 0.0
         visible: opacity && !useSeparateStreamSettingsWindows
-        height: 650
-        width: 1200
+        height: Math.min(root.height, root.liveRtxSettings && placeboSettingsLoader.item
+            ? placeboSettingsLoader.item.implicitHeight : 650)
+        width: Math.min(root.width, root.liveRtxSettings ? 540 : 1200)
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        color: Material.background
+        color: root.liveRtxSettings ? "transparent" : Material.background
         Loader {
             anchors.fill: parent
             id: placeboSettingsLoader
-            sourceComponent: placeboSettingsDialogComponent
+            sourceComponent: root.liveRtxSettings ? liveRendererDialogComponent : placeboSettingsDialogComponent
         }
     }
     Rectangle {
@@ -358,15 +401,21 @@ Item {
 
     Window {
         id: separatePlaceboSettingsWindow
+        Shortcut {
+            sequence: Chiaki.settings.rendererShortcut
+            enabled: Chiaki.window.rtxSettingsSupported && Chiaki.session
+            onActivated: root.toggleRendererSettings()
+        }
         visible: useSeparateStreamSettingsWindows && placeboSettingsRect.opacity > 0.0
         transientParent: Chiaki.window
         flags: Qt.Dialog | Qt.FramelessWindowHint
-        color: Material.background
+        color: root.liveRtxSettings ? "transparent" : Material.background
         modality: Qt.NonModal
         x: Math.round(root.mapToGlobal(0, 0).x)
         y: Math.round(root.mapToGlobal(0, 0).y)
-        width: Math.round(root.width)
-        height: Math.min(Math.round(root.height), 650)
+        width: Math.min(Math.round(root.width), root.liveRtxSettings ? 540 : 1200)
+        height: Math.min(Math.round(root.height), root.liveRtxSettings && separatePlaceboSettingsLoader.item
+            ? Math.ceil(separatePlaceboSettingsLoader.item.implicitHeight) : 650)
         onVisibleChanged: if (visible) requestActivate()
 
         Shortcut {
@@ -382,7 +431,7 @@ Item {
         Loader {
             anchors.fill: parent
             id: separatePlaceboSettingsLoader
-            sourceComponent: placeboSettingsDialogComponent
+            sourceComponent: root.liveRtxSettings ? liveRendererDialogComponent : placeboSettingsDialogComponent
         }
     }
 
@@ -442,6 +491,8 @@ Item {
 
             Label {
                 id: errorTextLabel
+                Layout.maximumWidth: Math.max(200, Math.min(root.width-60, 800))
+                wrapMode: Text.WordWrap
                 Layout.alignment: Qt.AlignCenter
                 horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: 20
@@ -456,6 +507,7 @@ Item {
 
     Dialog {
         id: infoDialog
+        property bool holdsStreamInput: false
         property alias text: infoDialogLabel.text
         property Item restoreFocusItem
         parent: Overlay.overlay
@@ -468,6 +520,11 @@ Item {
             if (restoreFocusItem)
                 restoreFocusItem.forceActiveFocus(Qt.TabFocusReason);
             infoDialogLabel.focus = false;
+            if (holdsStreamInput) {
+                holdsStreamInput = false;
+                root.releaseInput();
+                Chiaki.window.requestOverlayUpdate();
+            }
         }
 
         Component.onCompleted: {
@@ -480,6 +537,8 @@ Item {
 
             Label {
                 id: infoDialogLabel
+                Layout.maximumWidth: Math.max(200, Math.min(root.width - 80, 640))
+                wrapMode: Text.WordWrap
                 Keys.onEscapePressed: infoDialog.close()
                 Keys.onReturnPressed: infoDialog.close()
             }
@@ -525,6 +584,8 @@ Item {
         function onSessionChanged() {
             if (Chiaki.session)
                 root.showStreamView();
+            else if (placeboSettingsRect.opacity)
+                root.closeDialog();
         }
 
         function onShowPsnView() {
@@ -595,6 +656,11 @@ Item {
     Component {
         id: displaySettingsDialogComponent
         DisplaySettingsDialog { }
+    }
+
+    Component {
+        id: liveRendererDialogComponent
+        LiveRendererDialog { }
     }
 
     Component {

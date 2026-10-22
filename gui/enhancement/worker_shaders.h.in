@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+#pragma once
+// AMD source is embedded unchanged; see third-party/fsr1/LICENSE.
+static const char *commonShader = R"CNGX(
+Texture2D<float4> a : register(t0);
+Texture2D<float4> b : register(t1);
+Texture2D<float4> c : register(t2);
+Texture2D<float4> d : register(t3);
+Texture2D<int2> optical : register(t4);
+RWTexture2D<float4> target : register(u0);
+SamplerState clampSampler : register(s0);
+cbuffer Params : register(b0) {
+    uint2 sourceSize; uint2 outputSize;
+    float2 vectorScale; float sharpness; uint resetHistory;
+};
+[numthreads(8,8,1)] void scaleMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    target[p.xy] = a.SampleLevel(clampSampler, (p.xy+0.5)/outputSize, 0);
+}
+[numthreads(8,8,1)] void grayMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    float3 rgb = a.SampleLevel(clampSampler,(p.xy+0.5)/outputSize,0).rgb;
+    target[p.xy] = dot(rgb,float3(0.2126,0.7152,0.0722));
+}
+[numthreads(8,8,1)] void zeroMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    target[p.xy] = 0;
+}
+[numthreads(8,8,1)] void motionMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    float2 g = (p.xy+0.5)*sourceSize/outputSize-0.5;
+    int2 lo = int2(floor(g));
+    float2 f = frac(g);
+    int2 limit = int2(sourceSize)-1;
+    float2 v00 = optical.Load(int3(clamp(lo,int2(0,0),limit),0));
+    float2 v10 = optical.Load(int3(clamp(lo+int2(1,0),int2(0,0),limit),0));
+    float2 v01 = optical.Load(int3(clamp(lo+int2(0,1),int2(0,0),limit),0));
+    float2 v11 = optical.Load(int3(clamp(lo+int2(1,1),int2(0,0),limit),0));
+    float2 v = lerp(lerp(v00,v10,f.x),lerp(v01,v11,f.x),f.y);
+    target[p.xy] = float4(v/32.0*vectorScale,0,0);
+}
+[numthreads(8,8,1)] void residualMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    float4 native = a.Load(int3(p.xy,0));
+    target[p.xy] = float4(saturate(native.rgb+b.Load(int3(p.xy,0)).rgb-c.Load(int3(p.xy,0)).rgb),1);
+}
+)CNGX";
+
+static const char *fsrShader = R"CNGX(
+#define A_GPU 1
+#define A_HLSL 1
+#define FSR_EASU_F 1
+#define FSR_RCAS_F 1
+@FSR_A@
+Texture2D<float4> a : register(t0);
+RWTexture2D<float4> target : register(u0);
+SamplerState clampSampler : register(s0);
+cbuffer Params : register(b0) {
+    uint2 sourceSize; uint2 outputSize;
+    float2 vectorScale; float sharpness; uint resetHistory;
+};
+AF4 FsrEasuRF(AF2 p) {return a.GatherRed(clampSampler,p);}
+AF4 FsrEasuGF(AF2 p) {return a.GatherGreen(clampSampler,p);}
+AF4 FsrEasuBF(AF2 p) {return a.GatherBlue(clampSampler,p);}
+AF4 FsrRcasLoadF(ASU2 p) {return a.Load(int3(clamp(p,int2(0,0),int2(sourceSize)-1),0));}
+void FsrRcasInputF(inout AF1 r,inout AF1 g,inout AF1 b) {}
+@FSR_ONE@
+[numthreads(8,8,1)] void easuMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    AU4 c0,c1,c2,c3;
+    FsrEasuCon(c0,c1,c2,c3,sourceSize.x,sourceSize.y,sourceSize.x,sourceSize.y,outputSize.x,outputSize.y);
+    AF3 rgb; FsrEasuF(rgb,p.xy,c0,c1,c2,c3);
+    target[p.xy] = float4(rgb,1);
+}
+[numthreads(8,8,1)] void rcasMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    AU4 con; FsrRcasCon(con,2.0*(1.0-sharpness));
+    AF1 r,g,b; FsrRcasF(r,g,b,p.xy,con);
+    target[p.xy] = float4(r,g,b,1);
+}
+)CNGX";

@@ -1,5 +1,5 @@
 {
-  "name": "chiaki-ng",
+  "name": "chiaki-ngx",
   "version": "1.9.9",
   "dependencies": [
     "pkgconf",

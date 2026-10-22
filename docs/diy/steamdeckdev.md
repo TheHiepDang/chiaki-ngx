@@ -1,4 +1,4 @@
-# Developing chiaki-ng updates on Steam Deck
+# Developing chiaki-ngx updates on Steam Deck
 
 This is for contributors that want to make/test updates to the codebase without building a new flatpak each time.
 
@@ -11,7 +11,7 @@ This is for contributors that want to make/test updates to the codebase without 
 1. Install flatpak with debug extension and/or build a new one with any added dependencies following [Building the Flatpak Yourself](buildit.md){target="_blank" rel="noopener"}
 
     ``` bash
-    flatpak install --user --include-debug -y https://raw.githubusercontent.com/streetpea/chiaki-ng/main/scripts/flatpak/io.github.streetpea.Chiaki4deck-devel.flatpakref
+    flatpak install --user --include-debug -y https://raw.githubusercontent.com/TheHiepDang/chiaki-ngx/main/scripts/flatpak/io.github.streetpea.Chiaki4deck-devel.flatpakref
     ```
 
     !!! Info "Creating local flatpak builds"
@@ -21,7 +21,7 @@ This is for contributors that want to make/test updates to the codebase without 
         ``` bash
         sources:
         - type: git
-          url: https://github.com/streetpea/chiaki-ng.git
+          url: https://github.com/TheHiepDang/chiaki-ngx.git
           branch: main
         ```
 
@@ -30,10 +30,10 @@ This is for contributors that want to make/test updates to the codebase without 
         ``` bash
         sources:
         - type: dir
-          path: path-to-chiaki-ng-git
+          path: path-to-chiaki-ngx-git
         ```
 
-2. Copy config file from chiaki-ng
+2. Copy config file from chiaki-ngx
 
     ``` bash
     cp ~/.var/app/io.github.streetpea.Chiaki4deck/config/Chiaki/Chiaki.conf ~/.var/app/io.github.streetpea.Chiaki4deck-devel/config/Chiaki/Chiaki.conf 
@@ -56,19 +56,19 @@ This is for contributors that want to make/test updates to the codebase without 
     === "HTTPS"
 
         ``` bash
-        git clone --recurse-submodules https://github.com/streetpea/chiaki-ng.git
+        git clone --recurse-submodules https://github.com/TheHiepDang/chiaki-ngx.git
         ```
 
     === "SSH"
 
         ``` bash
-        git clone --recurse-submodules git@github.com:streetpea/chiaki-ng.git
+        git clone --recurse-submodules git@github.com:TheHiepDang/chiaki-ngx.git
         ```
 
     === "GitHub cli"
 
         ``` bash
-        gh repo clone streetpea/chiaki-ng
+        gh repo clone TheHiepDang/chiaki-ngx
         ```
 
     !!! Question "What if I'm testing changes from my branch?"
@@ -77,7 +77,7 @@ This is for contributors that want to make/test updates to the codebase without 
 
 ## Creating and Debugging Builds without New Flatpak Build
 
-1. Enter the development version of the flatpak with the chiaki-ng source code mounted with:
+1. Enter the development version of the flatpak with the chiaki-ngx source code mounted with:
 
     ``` bash
     flatpak run --command=bash --devel io.github.streetpea.Chiaki4deck-devel
@@ -106,7 +106,7 @@ This is for contributors that want to make/test updates to the codebase without 
             cmake -DCMAKE_BUILD_TYPE=Debug ..
             ```
         
-        5. Build `chiaki-ng`
+        5. Build `chiaki-ngx`
 
             ``` bash
             make
@@ -132,7 +132,7 @@ This is for contributors that want to make/test updates to the codebase without 
             cmake -DCMAKE_BUILD_TYPE=Release ..
             ```
         
-        5. Build `chiaki-ng`
+        5. Build `chiaki-ngx`
 
             ``` bash
             make

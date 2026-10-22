@@ -1,3 +1,5 @@
+> Inherited upstream chiaki-ng history and plans. Current chiaki-ngx features and status are documented in docs/diy/enhancements.md and docs/diy/gameplay-capture-findings.md.
+
 # Completed (Done) Updates
 
 

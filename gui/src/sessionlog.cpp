@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
 #include <sessionlog.h>
+#include "../enhancement/diagnostics.h"
 #include <chiaki/log.h>
 
 #include <QStandardPaths>
@@ -40,6 +41,8 @@ SessionLog::SessionLog(StreamSession *session, uint32_t level_mask, const QStrin
 		}
 	}
 
+    DiagnosticLog::record(QtInfoMsg, QString("[session-log] file=%1 sanitization=%2")
+        .arg(filename).arg(sanitize));
 	CHIAKI_LOGI(&log, "Chiaki Version " CHIAKI_VERSION);
 }
 

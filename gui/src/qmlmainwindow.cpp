@@ -1,6 +1,16 @@
 #include "qmlmainwindow.h"
+#include "../enhancement/eye_candy.h"
+#include "../enhancement/runtime_route.h"
+#include <vector>
 #include "qmlbackend.h"
 #include "qmlsvgprovider.h"
+#include "../enhancement/screenshot.h"
+#include <QDateTime>
+#include <QDir>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "chiaki/log.h"
 #include "chiaki/time.h"
 #include "streamsession.h"
@@ -163,6 +173,8 @@ public:
         valueFont.setPixelSize(18);
         valueFont.setBold(true);
 
+        fpsRow = makeRow(tr("FPS"), QColor(QStringLiteral("#a5d6a7")), titleFont, valueFont, fpsValue);
+        connect(owner, &QmlMainWindow::gameplayStatsChanged, this, &StatsOverlayWidget::refresh);
         bitrateRow = makeRow(tr("Mbps"), QColor(QStringLiteral("#00a7ff")), titleFont, valueFont, bitrateValue);
         queueRow = makeRow(tr("queue depth avg"), QColor(QStringLiteral("#90caf9")), titleFont, valueFont, queueDepthValue);
         pendingRow = makeRow(tr("pending frame age"), QColor(QStringLiteral("#90caf9")), titleFont, valueFont, pendingAgeValue);
@@ -237,6 +249,7 @@ public:
 
     void refresh()
     {
+        fpsValue->setText(owner ? owner->gameplayFps() : QStringLiteral("0.0"));
         StreamSession *session = current_session;
         const bool hasSession = session != nullptr;
 
@@ -274,6 +287,8 @@ private:
     QPointer<QmlMainWindow> owner;
     QPointer<QmlBackend> backend;
     QPointer<StreamSession> current_session;
+    QWidget *fpsRow = nullptr;
+    QLabel *fpsValue = nullptr;
     QWidget *bitrateRow = nullptr;
     QWidget *queueRow = nullptr;
     QWidget *pendingRow = nullptr;
@@ -1060,7 +1075,7 @@ static void logBufferedPacingStats(qint64 now_us, qint64 interval_us, qint64 del
         last_log_us = now_us;
     else if (now_us - last_log_us >= 1000000 && samples > 0) {
         CHIAKI_NOISY_DEBUG().nospace()
-            << "[pace] timer_owned interval_us=" << interval_us
+            << "[RTX][Pace] timer_owned interval_us=" << interval_us
             << " delta_us_min=" << min_delta_us
             << " delta_us_max=" << max_delta_us
             << " delta_us_avg=" << (sum_delta_us / samples)
@@ -2523,6 +2538,17 @@ private:
     QWindow *window = {};
 };
 
+bool QmlMainWindow::rtxSettingsSupported() const
+{
+#ifdef Q_OS_WIN
+    return render_backend == RenderBackend::Vulkan &&
+        chiaki_enhancement::isRtxAdapter(vk_device_props.vendorID,
+            QString::fromUtf8(vk_device_props.deviceName).toStdWString());
+#else
+    return false;
+#endif
+}
+
 QmlMainWindow::QmlMainWindow(Settings *settings, bool exit_app_on_stream_exit)
     : QWindow()
     , settings(settings)
@@ -2560,6 +2586,11 @@ QmlMainWindow::~QmlMainWindow()
     }
 
     drainRenderThread();
+    if (quick_render) {
+        const auto dispose = [this]() { delete enhancement_pipeline; enhancement_pipeline = nullptr; };
+        if (QThread::currentThread() == render_thread) dispose();
+        else QMetaObject::invokeMethod(quick_render, dispose, Qt::BlockingQueuedConnection);
+    }
 
     if (buffered_pace_thread) {
         buffered_pace_thread->stopThread();
@@ -2869,10 +2900,11 @@ void QmlMainWindow::setSettings(Settings *new_settings)
     QString profile = settings->GetCurrentProfile();
     qCCritical(chiakiGui) << "Current Profile: " << profile;
     if(profile.isEmpty())
-        QGuiApplication::setApplicationDisplayName("chiaki-ng");
+        QGuiApplication::setApplicationDisplayName("chiaki-ngx");
     else
-        QGuiApplication::setApplicationDisplayName(QString("chiaki-ng:%1").arg(profile));
+        QGuiApplication::setApplicationDisplayName(QString("chiaki-ngx:%1").arg(profile));
     this->setTitle(QGuiApplication::applicationDisplayName());
+    if (quick_render) updateEnhancementSettings();
 }
 
 void QmlMainWindow::show()
@@ -3091,6 +3123,7 @@ void QmlMainWindow::presentFrame(ChiakiFfmpegFrame frame, int32_t frames_lost, q
         } placebo_state_unlocker{&placebo_state_mutex};
         if (queue_pts_origin < 0.0 || frame.pts + 1e-6 < queue_pts_origin) {
             logPtsRollback("presentFrame/rollback", frame.pts, queue_pts_origin, false, frame.duration * 1000.0);
+            enhancement_history_reset_requested.storeRelease(1);
             pl_queue_reset(placebo_queue);
             resetQueueDepthTracking();
             ts_start = 0;
@@ -4965,6 +4998,10 @@ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
             VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
             VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,
             VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,
+#ifdef Q_OS_WIN
+            VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+            VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+#endif
         };
 
         struct pl_vulkan_params vulkan_params = {
@@ -4974,7 +5011,7 @@ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
             PL_VULKAN_DEFAULTS
             .extra_queues = VK_QUEUE_VIDEO_DECODE_BIT_KHR,
             .opt_extensions = opt_dev_extensions,
-            .num_opt_extensions = 4,
+            .num_opt_extensions = sizeof(opt_dev_extensions) / sizeof(opt_dev_extensions[0]),
         };
         placebo_vulkan = pl_vulkan_create(placebo_log, &vulkan_params);
         if (!placebo_vulkan) {
@@ -5069,6 +5106,9 @@ renderer_backend_ready:
             qCCritical(chiakiGui) << "Failed to create quick Vulkan semaphore";
     }
 
+    qCInfo(chiakiGui) << "[RTX][Settings] supported=" << rtxSettingsSupported()
+        << "backend=" << static_cast<int>(render_backend)
+        << "adapter=" << QString::fromUtf8(vk_device_props.deviceName);
     quick_render = new RenderControl(this);
 
     QQuickWindow::setDefaultAlphaBuffer(true);
@@ -5105,6 +5145,14 @@ renderer_backend_ready:
         const bool preserve_startup_warmup = s && startup_warmup_preserve_next_session_change;
         startup_warmup_preserve_next_session_change = false;
         session = s;
+        enhancement_neural_available = true;
+        enhancement_applying = false;
+        enhancement_neural_failure.clear();
+        enhancement_cadence = tr("No enhanced frames presented");
+        gameplay_fps = QStringLiteral("0.0");
+        emit gameplayStatsChanged();
+        emit enhancementStatusChanged();
+        updateEnhancementSettings();
         stream_session_active.storeRelease(s ? 1 : 0);
         startup_video_visible_generation.fetchAndAddRelaxed(1);
         grab_input = 0;
@@ -5114,8 +5162,23 @@ renderer_backend_ready:
         // At session start there is no prior in-flight frame_mix, and the queue
         // reset below is mutex-protected, so blocking the main thread here is
         // unnecessary and causes a visible freeze in the connecting UI.
-        if (!s)
+        if (!s) {
             drainRenderThread();
+            // The worker and its temporal outputs belong to a live stream only.
+            QMetaObject::invokeMethod(quick_render, [this]() {
+                delete enhancement_pipeline;
+                enhancement_pipeline = nullptr;
+                enhancement_seen_signature = false;
+                screenshot_requested.storeRelease(0);
+                gameplay_stats_since = gameplay_last_real = gameplay_last_fg = 0;
+                gameplay_real_count = gameplay_fg_count = 0;
+            }, Qt::BlockingQueuedConnection);
+            enhancement_status = tr("Inactive — not streaming");
+            enhancement_dimensions = tr("Video dimensions available during streaming");
+            enhancement_upscaling_eligible = false;
+            enhancement_nr_active = enhancement_fsr_active = enhancement_fg_active = false;
+            emit enhancementStatusChanged();
+        }
         if (!preserve_startup_warmup) {
             {
                 QMutexLocker locker(&direct_frame_mutex);
@@ -5283,6 +5346,7 @@ renderer_backend_ready:
         break;
     }
     setZoomFactor(settings->GetZoomFactor());
+    updateEnhancementSettings();
 }
 
 void QmlMainWindow::drainRenderThread()
@@ -5924,7 +5988,7 @@ void QmlMainWindow::createSwapchain()
             if (surface_renderable && failures >= 60 && failure_duration_us >= 3000000) {
                 handleVulkanRendererFallback(
                     tr("Vulkan renderer stalled"),
-                    tr("The Vulkan surface could not recover. Chiaki-ng will relaunch with OpenGL for this run only."),
+                    tr("The Vulkan surface could not recover. Chiaki-ngx will relaunch with OpenGL for this run only."),
                     tr("Vulkan surface creation failed repeatedly while the window was visible. OpenGL is being used for this launch only."));
             } else {
                 swapchain_recreate_pending.storeRelease(1);
@@ -5975,6 +6039,8 @@ void QmlMainWindow::createSwapchain()
 void QmlMainWindow::destroySwapchain()
 {
     Q_ASSERT(QThread::currentThread() == render_thread);
+    if (enhancement_pipeline) enhancement_pipeline->reset();
+    enhancement_seen_signature = false;
 
     if (!placebo_swapchain)
         return;
@@ -6309,7 +6375,7 @@ void QmlMainWindow::handleVulkanDeviceLost(const QString &reason)
 {
     handleVulkanRendererFallback(
         tr("Vulkan device lost"),
-        tr("The Vulkan renderer stopped responding. Chiaki-ng will relaunch with OpenGL for this run only.\n\nReason: %1").arg(reason),
+        tr("The Vulkan renderer stopped responding. Chiaki-ngx will relaunch with OpenGL for this run only.\n\nReason: %1").arg(reason),
         tr("Vulkan device was lost. OpenGL is being used for this launch only. Reason: %1").arg(reason));
 }
 
@@ -6364,6 +6430,10 @@ void QmlMainWindow::render()
         render_pending = false;
         render_pending_during_cycle.storeRelaxed(0);
         return;
+    }
+    if (enhancement_history_reset_requested.fetchAndStoreRelaxed(0)) {
+        if (enhancement_pipeline) enhancement_pipeline->reset();
+        enhancement_seen_signature = false;
     }
     const qint64 render_entry_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
     last_render_entry_us.storeRelease(render_entry_us);
@@ -6656,9 +6726,10 @@ void QmlMainWindow::render()
     const double present_interval_s = refresh_interval_s;
     const bool stream_active = stream_session_active.loadAcquire() != 0;
     const bool timer_owned_playback = stream_active && mixer_active;
-    const double present_submit_interval_s = timer_owned_playback
-        ? present_interval_s
-        : stream_interval_s;
+    const bool enhancement_driven = stream_active && enhancement_pipeline && enhancement_pipeline->ownsPresentation();
+    const double present_submit_interval_s = chiaki_enhancement::presentationInterval(
+        stream_interval_s, present_interval_s, present_vsync_enabled, enhancement_driven,
+        timer_owned_playback);
     const qint64 present_interval_us = static_cast<qint64>(qMax(1.0, vsync_duration * 1000000.0) + 0.5);
     const bool pending_overflow_waiting = hasPendingFrameOverflow();
     const bool pending_frame_waiting = snapshotQueueDepth() >= effectiveQueueDepthLimit() || hasPendingFrame();
@@ -6694,6 +6765,7 @@ void QmlMainWindow::render()
             direct_frame = {};
         }
         if (incoming) {
+            ++enhancement_direct_signature;
             pl_unmap_avframe(placeboGpu(), &direct_frame);
             direct_frame = {};
             pl_avframe_params avparams = {};
@@ -6824,6 +6896,147 @@ void QmlMainWindow::render()
         }
     }
 
+    const struct pl_frame *hint_frame = nullptr;
+    for (int i = 0; i < frame_mix.num_frames; i++) {
+        if (frame_mix.timestamps[i] > 0.0f)
+            break;
+        hint_frame = frame_mix.frames[i];
+    }
+    if (!hint_frame && frame_mix.num_frames)
+        hint_frame = frame_mix.frames[0];
+    // Feed the worker before acquiring a presentation image. A decoded-frame
+    // arrival must not present the previous enhancement output again: those
+    // redundant swaps consume display slots and stall both IPC and real frames.
+    pl_frame enhancement_layout = {};
+    enhancement_layout.crop = {0, 0, float(swapchain_size.width()), float(swapchain_size.height())};
+    if (hint_frame) {
+        pl_rect2df crop = hint_frame->crop;
+        switch (video_mode) {
+        case VideoMode::Normal:
+            pl_rect2df_aspect_copy(&enhancement_layout.crop, &crop, 0.0);
+            break;
+        case VideoMode::Stretch:
+            // Nothing to do, target.crop already covers the full image
+            break;
+        case VideoMode::Zoom:
+            if(zoom_factor == -1)
+                pl_rect2df_aspect_copy(&enhancement_layout.crop, &crop, 1.0);
+            else
+            {
+                const float z = powf(2.0f, zoom_factor);
+                const float sx = z * fabsf(pl_rect_w(crop)) / pl_rect_w(enhancement_layout.crop);
+                const float sy = z * fabsf(pl_rect_h(crop)) / pl_rect_h(enhancement_layout.crop);
+                pl_rect2df_stretch(&enhancement_layout.crop, sx, sy);
+            }
+            break;
+        }
+    }
+    pl_rect2df enhancement_visible = enhancement_layout.crop;
+    if (stream_active && hint_frame && frame_mix.num_frames > 0) {
+        if (!enhancement_pipeline) {
+            enhancement_pipeline = new EnhancementPipeline(quick_render);
+        connect(enhancement_pipeline, &EnhancementPipeline::applyingChanged, this,
+            [this](bool applying) {
+                enhancement_applying = applying && stream_session_active.loadAcquire();
+                emit enhancementStatusChanged();
+                requestOverlayUpdate();
+            }, Qt::QueuedConnection);
+        connect(enhancement_pipeline, &EnhancementPipeline::neuralUnavailable, this,
+            [this](const QString &reason) {
+                if (!stream_session_active.loadAcquire() || !enhancement_neural_available)
+                    return;
+                enhancement_neural_available = false;
+                enhancement_neural_failure = reason;
+                enhancement_nr_active = enhancement_fsr_active = false;
+                emit enhancementStatusChanged();
+                updateEnhancementSettings();
+                if (quick_item)
+                    QMetaObject::invokeMethod(quick_item, "showEnhancementWarning",
+                        Q_ARG(QVariant, QVariant(reason)));
+            }, Qt::QueuedConnection);
+        connect(enhancement_pipeline, &EnhancementPipeline::cadenceChanged, this,
+            [this](const QString &text) {
+                if (!stream_session_active.loadAcquire()) return;
+                enhancement_cadence = text;
+                emit enhancementStatusChanged();
+            }, Qt::QueuedConnection);
+            connect(enhancement_pipeline, &EnhancementPipeline::frameAvailable, this, [this]() {
+                scheduleUpdate(true, UpdateRequestReason::PendingFrame);
+            }, Qt::QueuedConnection);
+            connect(enhancement_pipeline, &EnhancementPipeline::statusChanged, this,
+                [this](const QString &status, int nw, int nh, int rw, int rh, bool nr, bool fsr, bool fg) {
+                    if (!stream_session_active.loadAcquire())
+                        return; // Ignore status queued before session teardown.
+                    enhancement_status = status;
+                    enhancement_dimensions = nw > 0 && nh > 0
+                        ? tr("Native %1×%2 · NR %3×%4 (%5% requested)")
+                            .arg(nw).arg(nh).arg(rw).arg(rh).arg(settings->GetEnhancementPercent())
+                        : tr("Video dimensions available during streaming");
+                    enhancement_upscaling_eligible = rw > 0 && rh > 0 && (rw < nw || rh < nh);
+                    enhancement_nr_active = nr; enhancement_fsr_active = fsr; enhancement_fg_active = fg;
+                    emit enhancementStatusChanged();
+                }, Qt::QueuedConnection);
+        }
+        enhancement_visible.x0 = qBound(0.0f, enhancement_visible.x0, float(swapchain_size.width()));
+        enhancement_visible.y0 = qBound(0.0f, enhancement_visible.y0, float(swapchain_size.height()));
+        enhancement_visible.x1 = qBound(0.0f, enhancement_visible.x1, float(swapchain_size.width()));
+        enhancement_visible.y1 = qBound(0.0f, enhancement_visible.y1, float(swapchain_size.height()));
+        const float enhancement_width = fabsf(pl_rect_w(enhancement_visible));
+        const float enhancement_height = fabsf(pl_rect_h(enhancement_visible));
+        chiaki_enhancement::Extent enhancement_native;
+        // Zoom/stretch preserve the physical visible rectangle, not pixels outside
+        // the window. Crop is applied to the source before sending it to the worker.
+        enhancement_native.width = static_cast<uint32_t>(qMax(1.0f, qMin(enhancement_width, float(swapchain_size.width()))));
+        enhancement_native.height = static_cast<uint32_t>(qMax(1.0f, qMin(enhancement_height, float(swapchain_size.height()))));
+        const bool enhancement_hdr = pl_color_space_is_hdr(&enhancement_layout.color) || (hint_frame && pl_color_space_is_hdr(&hint_frame->color));
+        enhancement_pipeline->prepare(placebo_vulkan, enhancement_native, enhancement_options, enhancement_hdr);
+        enhancement_pipeline->setSourceInterval(uint64_t(qMax(0.0, stream_interval_s) * 1000000.0));
+        if (hint_frame) {
+            uint64_t signature = enhancement_direct_signature;
+            if (!bypass_frame_queue && frame_mix.signatures)
+                for (int n = 0; n < frame_mix.num_frames; ++n)
+                    if (frame_mix.frames[n] == hint_frame) { signature = frame_mix.signatures[n]; break; }
+            if (!enhancement_seen_signature || signature != enhancement_last_signature) {
+                enhancement_seen_signature = true;
+                enhancement_last_signature = signature;
+                ++enhancement_frame_id;
+                enhancement_input_timestamp = static_cast<uint64_t>(render_entry_us);
+            }
+            pl_tex input = enhancement_pipeline->beginFrame(enhancement_frame_id, enhancement_input_timestamp);
+            if (input) {
+                pl_frame native_target = {};
+                native_target.num_planes = 1; native_target.planes[0].texture = input;
+                native_target.planes[0].components = 4;
+                for (int n = 0; n < 4; ++n) native_target.planes[0].component_mapping[n] = n;
+                native_target.repr = pl_color_repr_rgb; native_target.color = pl_color_space_srgb;
+                native_target.crop = {0, 0, float(enhancement_native.width), float(enhancement_native.height)};
+                pl_frame source = *hint_frame; source.overlays = nullptr; source.num_overlays = 0;
+                const auto crop = source.crop;
+                const float sx = pl_rect_w(crop) / pl_rect_w(enhancement_layout.crop);
+                const float sy = pl_rect_h(crop) / pl_rect_h(enhancement_layout.crop);
+                source.crop = {
+                    crop.x0 + (enhancement_visible.x0 - enhancement_layout.crop.x0) * sx,
+                    crop.y0 + (enhancement_visible.y0 - enhancement_layout.crop.y0) * sy,
+                    crop.x0 + (enhancement_visible.x1 - enhancement_layout.crop.x0) * sx,
+                    crop.y0 + (enhancement_visible.y1 - enhancement_layout.crop.y0) * sy
+                };
+                pl_render_params prepare_params = pl_render_default_params;
+                prepare_params.upscaler = &pl_filter_bilinear;
+                if (pl_render_image(placebo_renderer, &source, &native_target, &prepare_params))
+                    enhancement_pipeline->submitFrame();
+                else
+                    enhancement_pipeline->reset();
+            }
+        }
+    } // Stream video only: never process or reuse output for the idle GUI.
+    if (stream_active && enhancement_pipeline && enhancement_pipeline->ownsPresentation() &&
+        !enhancement_pipeline->hasUnpresentedOutput() &&
+        !quick_need_render.loadRelaxed() && !quick_need_sync.loadRelaxed() &&
+        !screenshot_requested.loadRelaxed()) {
+        finalize_render();
+        return;
+    }
+
     const qint64 start_frame_begin_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
     const int queue_depth_before_start = snapshotQueueDepth();
     const bool start_frame_backlogged = pending_frame_waiting;
@@ -6880,7 +7093,7 @@ void QmlMainWindow::render()
             if (surface_renderable && failures >= 60 && failure_duration_us >= 3000000) {
                 handleVulkanRendererFallback(
                     tr("Vulkan renderer stalled"),
-                    tr("The Vulkan swapchain could not recover. Chiaki-ng will relaunch with OpenGL for this run only."),
+                    tr("The Vulkan swapchain could not recover. Chiaki-ngx will relaunch with OpenGL for this run only."),
                     tr("Vulkan swapchain failed repeatedly while the window was visible. OpenGL is being used for this launch only."));
             } else {
                 swapchain_recreate_pending.storeRelease(1);
@@ -6934,7 +7147,8 @@ void QmlMainWindow::render()
     if (render_entry_us_local > 0 && render_to_start_frame_us >= render_entry_us_local)
         logLatencyStats("render_to_start_frame", render_to_start_frame_us - render_entry_us_local);
     // Submit immediately and let the swapchain / render path enforce pacing.
-    auto close_started_frame = [this, timer_owned_playback, present_interval_us, start_frame_us, depth_limit, pending_frame_waiting, pending_overflow_waiting, snapshotQueueDepth, snapshotRenderScheduleState, present_submit_interval_s](bool present) -> bool {
+    auto close_started_frame = [this, timer_owned_playback, present_interval_us, start_frame_us, depth_limit, pending_frame_waiting, pending_overflow_waiting, snapshotQueueDepth, snapshotRenderScheduleState, present_submit_interval_s, enhancement_driven](bool present) -> bool {
+        bool submission_ok = true;
         const qint64 submit_ready_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
         const int queue_depth_now = snapshotQueueDepth();
         if (detailedVerboseTelemetryEnabled()) {
@@ -6979,7 +7193,7 @@ void QmlMainWindow::render()
                 this->render_submit_estimate_us.storeRelease(next_render_submit_estimate_us);
             }
         }
-        const bool use_deferred_swap = present &&
+        const bool use_deferred_swap = present && !enhancement_driven &&
             render_backend == RenderBackend::Vulkan &&
             vulkan_deferred_swap_enabled &&
             deferred_swap_thread &&
@@ -7015,8 +7229,10 @@ void QmlMainWindow::render()
             qint64 submit_us = submit_begin_us;
             {
                 QMutexLocker locker(&placebo_swapchain_mutex);
-                if (!pl_swapchain_submit_frame(placebo_swapchain))
+                if (!pl_swapchain_submit_frame(placebo_swapchain)) {
+                    submission_ok = false;
                     qCWarning(chiakiGui) << "Failed to submit Placebo frame!";
+                }
                 else {
                     submit_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
             logLatencyStats("pl_swapchain_submit_frame", submit_us - submit_begin_us);
@@ -7141,17 +7357,14 @@ void QmlMainWindow::render()
                 }
             }
         }
-        return true;
+        return submission_ok;
     };
 
-    const struct pl_frame *hint_frame = nullptr;
-    for (int i = 0; i < frame_mix.num_frames; i++) {
-        if (frame_mix.timestamps[i] > 0.0f)
-            break;
-        hint_frame = frame_mix.frames[i];
-    }
-    if (!hint_frame && frame_mix.num_frames)
-        hint_frame = frame_mix.frames[0];
+    pl_frame held_enhanced_frame = {};
+    const bool have_enhanced_output = stream_active && enhancement_pipeline &&
+        enhancement_pipeline->outputFrame(held_enhanced_frame);
+    if (!hint_frame && have_enhanced_output)
+        hint_frame = &held_enhanced_frame; // The real phase still needs presentation without a new decoded frame.
     struct pl_color_space hint = hint_frame ? hint_frame->color : pl_color_space{};
     struct pl_color_space target_csp = sw_frame.color_space;
     if (target_csp.hdr.max_luma <= 0.0f) {
@@ -7323,7 +7536,7 @@ void QmlMainWindow::render()
                                 render_schedule_state.second);
         }
     }
-    if (frame_mix.num_frames == 0) {
+    if (frame_mix.num_frames == 0 && !have_enhanced_output) {
         if (kept_frame_enqueued) {
             close_started_frame(false);
             bool scheduled_pending = finalize_render();
@@ -7470,14 +7683,62 @@ void QmlMainWindow::render()
         startup_video_visible_pending.storeRelease(1);
     }
 
+    pl_frame enhanced_frame = {};
+    const bool enhanced_output = stream_active && enhancement_pipeline && enhancement_pipeline->outputFrame(enhanced_frame);
+    pl_render_params enhanced_params = pl_render_default_params;
+    enhanced_params.upscaler = &pl_filter_bilinear;
+    enhanced_params.downscaler = &pl_filter_bilinear;
+    // Reuse libplacebo's existing color controls at final video presentation.
+    // Do not color the NR prepass, Chiaki overlays, or idle GUI, or apply twice.
+    pl_color_adjustment video_adjustment = params.color_adjustment
+        ? *params.color_adjustment : pl_color_adjustment_neutral;
+    if (stream_active && settings->GetPlaceboColorAdjustmentEnabled() &&
+        settings->GetPlaceboColorAdjustmentPreset() == PlaceboColorAdjustmentPreset::None) {
+        video_adjustment.brightness = settings->GetPlaceboColorAdjustmentBrightness();
+        video_adjustment.contrast = settings->GetPlaceboColorAdjustmentContrast();
+        video_adjustment.saturation = settings->GetPlaceboColorAdjustmentSaturation();
+        video_adjustment.gamma = settings->GetPlaceboColorAdjustmentGamma();
+        params.color_adjustment = &video_adjustment;
+        enhanced_params.color_adjustment = &video_adjustment;
+    }
+    pl_frame enhanced_target = target_frame;
+    EyeCandyTone eye_tone(settings->GetEyeCandyExposure() / 100.0f,
+                          settings->GetEyeCandyDarkArea() / 100.0f);
+    std::vector<const pl_hook *> eye_hooks;
+    const pl_hook *enhanced_eye_hooks[] = {&eye_tone.hook};
+    const bool eye_enabled = settings->GetPlaceboColorAdjustmentEnabled();
+    const bool eye_custom = settings->GetPlaceboColorAdjustmentPreset() == PlaceboColorAdjustmentPreset::None;
+    const bool eye_source_hdr = hint_frame && pl_color_space_is_hdr(&hint_frame->color);
+    const bool eye_target_hdr = pl_color_space_is_hdr(&target_frame.color);
+    const bool eye_requested = eye_tone.active() && eye_enabled && eye_custom;
+    const bool eye_applied = stream_active && eye_requested && hint_frame && !eye_source_hdr && !eye_target_hdr;
+    const int eye_state = int(stream_active) | (int(eye_requested) << 1) | (int(eye_source_hdr) << 2) |
+        (int(eye_target_hdr) << 3) | (int(eye_enabled) << 4) | (int(eye_custom) << 5);
+    if (eye_state != eye_candy_log_state) {
+        eye_candy_log_state = eye_state;
+        if (stream_active) qInfo() << "[EyeCandy][State] color_enabled=" << eye_enabled
+            << "custom=" << eye_custom << "tone_requested=" << eye_requested << "tone_applied=" << eye_applied
+            << "source_hdr=" << eye_source_hdr << "target_hdr=" << eye_target_hdr;
+    }
+    if (eye_applied) {
+        for (int n = 0; n < params.num_hooks; ++n) eye_hooks.push_back(params.hooks[n]);
+        eye_hooks.push_back(&eye_tone.hook);
+        params.hooks = eye_hooks.data();
+        params.num_hooks = int(eye_hooks.size());
+        enhanced_params.hooks = enhanced_eye_hooks;
+        enhanced_params.num_hooks = 1;
+    }
+    enhanced_target.crop = enhancement_visible;
     const qint64 render_call_begin_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
     if (render_entry_us_local > 0 && render_call_begin_us >= render_entry_us_local)
         logLatencyStats("render_prep", render_call_begin_us - render_entry_us_local);
     if (render_call_begin_us >= render_setup_begin_us)
         logRenderSetupStats(render_call_begin_us, render_call_begin_us - render_setup_begin_us);
-    if (!(bypass_frame_queue
-        ? pl_render_image(placebo_renderer, &direct_render_frame, &target_frame, &params)
-        : pl_render_image_mix(placebo_renderer, &frame_mix, &target_frame, &params)))
+    if (!(enhanced_output
+        ? pl_render_image(placebo_renderer, &enhanced_frame, &enhanced_target, &enhanced_params)
+        : bypass_frame_queue
+            ? pl_render_image(placebo_renderer, &direct_render_frame, &target_frame, &params)
+            : pl_render_image_mix(placebo_renderer, &frame_mix, &target_frame, &params)))
     {
         qCWarning(chiakiGui) << "Failed to render Placebo frame!";
         close_started_frame(false);
@@ -7493,7 +7754,37 @@ void QmlMainWindow::render()
                 logLatencyStats("render_work", render_after_us - render_entry_us_local);
         }
     }
-    close_started_frame(true);
+    if (screenshot_requested.fetchAndStoreRelaxed(0) != 0) {
+        const QImage image = captureVideoFrame(placeboGpu(), placebo_renderer,
+            enhanced_output ? &enhanced_frame : (bypass_frame_queue ? &direct_render_frame : nullptr),
+            enhanced_output || bypass_frame_queue ? nullptr : &frame_mix,
+            enhanced_output ? enhanced_target : target_frame,
+            enhanced_output ? &enhanced_params : &params);
+        const QString folder = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + QStringLiteral("/Chiaki-ngx");
+        const QString path = folder + QStringLiteral("/Chiaki-ngx-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz")) + QStringLiteral(".png");
+        QMetaObject::invokeMethod(this, [this, image, folder, path]() {
+            auto *watcher = new QFutureWatcher<bool>(this);
+            connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, path]() {
+                if (watcher->result()) qInfo().noquote() << "[Screenshot] Saved" << path;
+                else qWarning().noquote() << "[Screenshot] Failed to save" << path;
+                emit screenshotSaved(path, watcher->result());
+                watcher->deleteLater();
+            });
+            watcher->setFuture(QtConcurrent::run([image, folder, path]() {
+                return !image.isNull() && QDir().mkpath(folder) && image.save(path, "PNG");
+            }));
+        }, Qt::QueuedConnection);
+    }
+    uint64_t statsKey = enhancement_direct_signature;
+    if (!bypass_frame_queue && frame_mix.signatures && hint_frame)
+        for (int n=0;n<frame_mix.num_frames;++n)
+            if (frame_mix.frames[n] == hint_frame) { statsKey=frame_mix.signatures[n]+1; break; }
+    if (enhanced_output) statsKey = enhancement_pipeline->completedFrameId() | (uint64_t(1)<<63);
+    const bool generatedPhase = enhanced_output && enhancement_pipeline->generatedOutput();
+    if (close_started_frame(true)) {
+        recordGameplayPresentation(generatedPhase, statsKey);
+        if (enhanced_output) enhancement_pipeline->notePresented(chiaki_time_now_monotonic_us() - render_entry_us);
+    }
 
     if (startup_video_visible_refresh_pending.loadAcquire() != 0) {
         loading_transition_complete.storeRelease(1);
@@ -7510,6 +7801,19 @@ void QmlMainWindow::render()
 
 bool QmlMainWindow::handleShortcut(QKeyEvent *event)
 {
+    if (session && settings) {
+        const QKeySequence screenshotShortcut = QKeySequence::fromString(settings->GetScreenshotShortcut(), QKeySequence::PortableText);
+        if (screenshotShortcut.count() == 1 && event->keyCombination() == screenshotShortcut[0]) {
+            if (!event->isAutoRepeat()) requestScreenshot();
+            return true;
+        }
+        const QKeySequence rendererShortcut = QKeySequence::fromString(settings->GetRendererShortcut(), QKeySequence::PortableText);
+        if (rtxSettingsSupported() && rendererShortcut.count() == 1 && event->keyCombination() == rendererShortcut[0]) {
+            if (!event->isAutoRepeat())
+                emit rendererSettingsRequested();
+            return true;
+        }
+    }
     if (event->modifiers() == Qt::NoModifier) {
         switch (event->key()) {
         case Qt::Key_F11:
@@ -7570,7 +7874,18 @@ bool QmlMainWindow::event(QEvent *event)
     case QEvent::MouseButtonRelease:
         if (static_cast<QMouseEvent*>(event)->source() != Qt::MouseEventNotSynthesized)
             return true;
+        if (session && !grab_input && quick_item) {
+            auto *button = quick_item->findChild<QQuickItem *>(QStringLiteral("liveRendererButton"));
+            const auto *mouse = static_cast<QMouseEvent *>(event);
+            if (button && button->isVisible() && button->contains(button->mapFromScene(mouse->position()))) {
+                setCursor(Qt::ArrowCursor);
+                QGuiApplication::sendEvent(quick_window, event);
+                return true;
+            }
+        }
         if (session && !grab_input) {
+            if (has_video && settings->GetHideCursor())
+                setCursor(Qt::BlankCursor);
             if (event->type() == QEvent::MouseMove)
                 session->HandleMouseMoveEvent(static_cast<QMouseEvent*>(event), width(), height());
             else if (event->type() == QEvent::MouseButtonPress)
@@ -7668,4 +7983,140 @@ bool QmlMainWindow::event(QEvent *event)
 QObject *QmlMainWindow::focusObject() const
 {
     return quick_window->focusObject();
+}
+
+void QmlMainWindow::updateEnhancementSettings()
+{
+    if (!quick_render || !settings) return;
+    EnhancementOptions options;
+    options.neural = settings->GetEnhancementNeural() && enhancement_neural_available;
+    options.percent = settings->GetEnhancementPercent();
+    options.fsr = settings->GetEnhancementFsr();
+    options.sharpness = settings->GetEnhancementSharpness();
+    options.frameGeneration = settings->GetEnhancementFrameGeneration();
+    QMetaObject::invokeMethod(quick_render, [this, options]() {
+        enhancement_options = options;
+        QMetaObject::invokeMethod(this, [this]() { scheduleUpdate(true); }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
+
+QString QmlMainWindow::enhancementCadence() const
+{
+    const double hz = screen() ? screen()->refreshRate() : 0.0;
+    return tr("%1\nDisplay %2 Hz · VSync %3%4")
+        .arg(enhancement_cadence).arg(hz, 0, 'f', 0)
+        .arg(settings && settings->GetVSyncEnabled() ? tr("On") : tr("Off"))
+        .arg(settings && settings->GetVSyncEnabled() && hz <= 60.5 && settings->GetEnhancementFrameGeneration()
+            ? tr(" — display caps visible cadence") : QString());
+}
+
+void QmlMainWindow::requestScreenshot()
+{
+    if (!session || !has_video) return;
+    screenshot_requested.storeRelease(1);
+    scheduleUpdate(true, UpdateRequestReason::Unknown);
+}
+
+void QmlMainWindow::recordGameplayPresentation(bool generated, uint64_t frameKey)
+{
+    auto &last = generated ? gameplay_last_fg : gameplay_last_real;
+    if (frameKey && last != frameKey) {
+        last = frameKey;
+        if (generated) ++gameplay_fg_count; else ++gameplay_real_count;
+        if (renderer_diagnostic_active.loadAcquire()) {
+            if (generated) diagnostic_fg_total.fetchAndAddRelaxed(1);
+            else diagnostic_real_total.fetchAndAddRelaxed(1);
+        }
+    }
+    const uint64_t now = chiaki_time_now_monotonic_us();
+    if (!gameplay_stats_since) gameplay_stats_since = now;
+    const uint64_t interval = now - gameplay_stats_since;
+    if (interval < 1000000) return;
+    const double real = gameplay_real_count * 1000000.0 / interval;
+    const double fg = gameplay_fg_count * 1000000.0 / interval;
+    const QString text = enhancement_options.frameGeneration
+        ? tr("%1 total\nReal %2 / FG %3").arg(real+fg, 0, 'f', 1).arg(real, 0, 'f', 1).arg(fg, 0, 'f', 1)
+        : QString::number(real, 'f', 1);
+    gameplay_real_count = gameplay_fg_count = 0;
+    gameplay_stats_since = now;
+    QMetaObject::invokeMethod(this, [this,text]() {
+        if (!stream_session_active.loadAcquire()) return;
+        gameplay_fps = text;
+        emit gameplayStatsChanged();
+    }, Qt::QueuedConnection);
+}
+
+// Opt-in end-to-end diagnostic: actual window, scheduler, swapchain and worker.
+// Isolated INI settings are configured in main.cpp; no console/session is used.
+void QmlMainWindow::startRendererDiagnostic()
+{
+    const int fps = qMax(1, qEnvironmentVariableIntValue("CHIAKI_RENDER_DIAGNOSTIC_FPS"));
+    const QString root = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC_ROOT");
+    if (root.isEmpty()) return;
+    const QString mode = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC");
+    setTitle(QStringLiteral("Chiaki renderer diagnostic"));
+    setWindowState(Qt::WindowNoState);
+    resize(qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC_LARGE") ? 1600 : 1280, qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC_LARGE") ? 900 : 720);
+    if (quick_item) quick_item->setOpacity(0);
+    stream_session_active.storeRelease(1);
+    renderer_diagnostic_active.storeRelease(1);
+    setStreamMaxFPS(fps);
+    has_video = true;
+    updateEnhancementSettings();
+    auto *feed = new QTimer(this);
+    feed->setTimerType(Qt::PreciseTimer);
+    feed->setInterval(qMax(1, qRound(1000.0/fps)));
+    auto counter = std::make_shared<quint64>(0);
+    connect(feed, &QTimer::timeout, this, [this,counter,fps]() {
+        AVFrame *frame = make_startup_warmup_frame(1280,720,false,false);
+        if (!frame) return;
+        av_buffer_unref(&frame->opaque_ref);
+        const quint64 id = ++*counter;
+        for (int y=0;y<frame->height;++y) {
+            auto *row = frame->data[0] + y*frame->linesize[0];
+            for (int x=0;x<frame->width;++x)
+                row[x] = uint8_t(32 + (((x/32)+(y/32))%2)*96 + ((x >= int(id*3%1100) && x < int(id*3%1100)+80 && y>200 && y<400) ? 96 : 0));
+        }
+        ChiakiFfmpegFrame incoming = {};
+        incoming.frame=frame; incoming.pts=double(id)/fps; incoming.duration=1.0/fps;
+        presentFrame(incoming,0);
+    });
+    feed->start();
+    auto *poll = new QTimer(this);
+    poll->setInterval(100);
+    auto clock = std::make_shared<QElapsedTimer>(); clock->start();
+    auto sampleStart = std::make_shared<qint64>(-1);
+    auto beforeReal = std::make_shared<quint64>(0), beforeFg = std::make_shared<quint64>(0);
+    auto toggled = std::make_shared<bool>(false);
+    connect(poll,&QTimer::timeout,this,[=]() {
+        const bool ready = (!mode.contains("nr") || enhancement_nr_active) &&
+                           (!mode.contains("fg") || enhancement_fg_active || enhancement_status.contains("FG presentation skipped"));
+        if (*sampleStart < 0 && ready && clock->elapsed()>1000) {
+            *sampleStart=clock->elapsed();
+            *beforeReal=diagnostic_real_total.loadAcquire();
+            *beforeFg=diagnostic_fg_total.loadAcquire();
+        }
+        if (*sampleStart>=0 && !*toggled && qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC_TOGGLE_FSR") && clock->elapsed()-*sampleStart>1000) {
+            *toggled=true;
+            settings->SetEnhancementFsr(false);
+            updateEnhancementSettings();
+        }
+        if ((*sampleStart>=0 && clock->elapsed()-*sampleStart>=3000) || clock->elapsed()>20000) {
+            feed->stop(); poll->stop();
+            const double seconds=*sampleStart>=0 ? (clock->elapsed()-*sampleStart)/1000.0 : 0;
+            QJsonObject result;
+            result["mode"]=mode; result["source_fps"]=fps;
+            result["real_fps"]=seconds>0 ? (diagnostic_real_total.loadAcquire()-*beforeReal)/seconds : 0;
+            result["fg_fps"]=seconds>0 ? (diagnostic_fg_total.loadAcquire()-*beforeFg)/seconds : 0;
+            result["nr_active"]=enhancement_nr_active; result["fg_active"]=enhancement_fg_active;
+            result["nr_control_enabled"]=enhancement_neural_available;
+            result["status"]=enhancement_status;
+            QDir().mkpath(root);
+            QFile file(root+"/result.json"); if(file.open(QIODevice::WriteOnly)) file.write(QJsonDocument(result).toJson());
+            renderer_diagnostic_active.storeRelease(0);
+            stream_session_active.storeRelease(0);
+            close();
+        }
+    });
+    poll->start();
 }

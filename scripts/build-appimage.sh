@@ -89,4 +89,4 @@ chmod +x linuxdeploy-plugin-qt-${ARCH}.AppImage
     --exclude-library='libva*' \
     --exclude-library='libvulkan*' \
     --output appimage
-mv chiaki-ng-${ARCH}.AppImage chiaki-ng.AppImage
+mv chiaki-ngx-${ARCH}.AppImage chiaki-ngx.AppImage

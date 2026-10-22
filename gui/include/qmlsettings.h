@@ -1,10 +1,21 @@
 #pragma once
 
 #include "settings.h"
+#include <QTimer>
 
 class QmlSettings : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(int eyeCandyExposure READ eyeCandyExposure WRITE setEyeCandyExposure NOTIFY eyeCandyChanged)
+    Q_PROPERTY(int eyeCandyDarkArea READ eyeCandyDarkArea WRITE setEyeCandyDarkArea NOTIFY eyeCandyChanged)
+    Q_PROPERTY(QString rendererShortcut READ rendererShortcut NOTIFY rendererShortcutChanged)
+    Q_PROPERTY(QString screenshotShortcut READ screenshotShortcut NOTIFY screenshotShortcutChanged)
+    Q_PROPERTY(bool enhancementNeural READ enhancementNeural WRITE setEnhancementNeural NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementPercent READ enhancementPercent WRITE setEnhancementPercent NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementPercentPreview READ enhancementPercentPreview NOTIFY enhancementPercentPreviewChanged)
+    Q_PROPERTY(bool enhancementFsr READ enhancementFsr WRITE setEnhancementFsr NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementSharpness READ enhancementSharpness WRITE setEnhancementSharpness NOTIFY enhancementChanged)
+    Q_PROPERTY(bool enhancementFrameGeneration READ enhancementFrameGeneration WRITE setEnhancementFrameGeneration NOTIFY enhancementChanged)
     Q_PROPERTY(bool remotePlayAsk READ remotePlayAsk WRITE setRemotePlayAsk NOTIFY remotePlayAskChanged)
     Q_PROPERTY(bool addSteamShortcutAsk READ addSteamShortcutAsk WRITE setAddSteamShortcutAsk NOTIFY addSteamShortcutAskChanged)
     Q_PROPERTY(bool hideCursor READ hideCursor WRITE setHideCursor NOTIFY hideCursorChanged)
@@ -163,6 +174,22 @@ class QmlSettings : public QObject
     Q_PROPERTY(float placeboToneMappingContrastSmoothness READ placeboToneMappingContrastSmoothness WRITE setPlaceboToneMappingContrastSmoothness NOTIFY placeboToneMappingContrastSmoothnessChanged)
 
 public:
+    bool enhancementNeural() const;
+    int eyeCandyExposure() const;
+    void setEyeCandyExposure(int value);
+    int eyeCandyDarkArea() const;
+    void setEyeCandyDarkArea(int value);
+    void setEnhancementNeural(bool value);
+    int enhancementPercent() const;
+    void setEnhancementPercent(int value);
+    int enhancementPercentPreview() const;
+    Q_INVOKABLE void queueEnhancementPercent(int value);
+    bool enhancementFsr() const;
+    void setEnhancementFsr(bool value);
+    int enhancementSharpness() const;
+    void setEnhancementSharpness(int value);
+    bool enhancementFrameGeneration() const;
+    void setEnhancementFrameGeneration(bool value);
     QmlSettings(Settings *settings, QObject *parent = nullptr);
 
     int resolutionLocalPS4() const;
@@ -602,6 +629,12 @@ public:
     Q_INVOKABLE void refreshAudioDevices();
     Q_INVOKABLE QString changeControllerKey(int button, int key);
     Q_INVOKABLE void clearKeyMapping();
+    QString rendererShortcut() const;
+    Q_INVOKABLE void captureRendererShortcut(int key, int modifiers);
+    Q_INVOKABLE void resetRendererShortcut();
+    QString screenshotShortcut() const;
+    Q_INVOKABLE void captureScreenshotShortcut(int key, int modifiers);
+    Q_INVOKABLE void resetScreenshotShortcut();
     Q_INVOKABLE void exportSettings();
     Q_INVOKABLE QString chooseSteamBasePath();
     Q_INVOKABLE void exportPlaceboSettings();
@@ -612,6 +645,11 @@ public:
     Q_INVOKABLE QString stringForStreamMenuShortcut() const;
 
 signals:
+    void enhancementChanged();
+    void eyeCandyChanged();
+    void enhancementPercentPreviewChanged();
+    void rendererShortcutChanged();
+    void screenshotShortcutChanged();
     void resolutionLocalPS4Changed();
     void resolutionRemotePS4Changed();
     void resolutionLocalPS5Changed();
@@ -768,6 +806,10 @@ signals:
     void placeboChanged();
 
 private:
+    QTimer enhancement_percent_timer;
+    QTimer diagnostic_settings_timer;
+    void logDiagnosticSettings();
+    int enhancement_percent_preview = -1;
     Settings *settings = {};
     QStringList audio_in_devices;
     QStringList audio_out_devices;

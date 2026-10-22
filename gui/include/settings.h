@@ -361,6 +361,21 @@ class Settings : public QObject
 		void SetHardwareDecoder(const QString &hw_decoder);
 		bool GetUseZeroCopy() const { return settings.value("settings/use_zero_copy", true).toBool(); }
 		void SetUseZeroCopy(bool enabled) { settings.setValue("settings/use_zero_copy", enabled); }
+        bool GetEnhancementNeural() const { return settings.value("enhancement/neural", false).toBool(); }
+        void SetEnhancementNeural(bool value) { settings.setValue("enhancement/neural", value); }
+        int GetEnhancementPercent() const { return qBound(50, settings.value("enhancement/percent", 65).toInt(), 100); }
+        void SetEnhancementPercent(int value) { settings.setValue("enhancement/percent", qBound(50, value, 100)); }
+        bool GetEnhancementFsr() const { return settings.value("enhancement/fsr", true).toBool(); }
+        void SetEnhancementFsr(bool value) { settings.setValue("enhancement/fsr", value); }
+        int GetEnhancementSharpness() const { return qBound(0, settings.value("enhancement/sharpness", 20).toInt(), 100); }
+        void SetEnhancementSharpness(int value) { settings.setValue("enhancement/sharpness", qBound(0, value, 100)); }
+        bool GetEnhancementFrameGeneration() const { return settings.value("enhancement/frame_generation", false).toBool(); }
+        void SetEnhancementFrameGeneration(bool value) { settings.setValue("enhancement/frame_generation", value); }
+        int GetEyeCandyExposure() const { return qBound(-100, settings.value("eye_candy/exposure", 0).toInt(), 100); }
+        void SetEyeCandyExposure(int value) { settings.setValue("eye_candy/exposure", qBound(-100, value, 100)); }
+        int GetEyeCandyDarkArea() const { return qBound(-100, settings.value("eye_candy/dark_area", 0).toInt(), 100); }
+        void SetEyeCandyDarkArea(int value) { settings.setValue("eye_candy/dark_area", qBound(-100, value, 100)); }
+
 		bool GetVulkanDeferredSwap() const { return settings.value("settings/vulkan_deferred_swap", false).toBool(); }
 		void SetVulkanDeferredSwap(bool enabled) { settings.setValue("settings/vulkan_deferred_swap", enabled); }
 
@@ -479,6 +494,10 @@ class Settings : public QObject
 
 		QString GetTimeFormat() const     { return time_format; }
 		void ClearKeyMapping();
+        QString GetScreenshotShortcut() const { return settings.value("keys/screenshot_shortcut", "F4").toString(); }
+        void SetScreenshotShortcut(const QString &sequence) { settings.setValue("keys/screenshot_shortcut", sequence); }
+        QString GetRendererShortcut() const { return settings.value("keys/renderer_shortcut", "Ctrl+Shift+F").toString(); }
+        void SetRendererShortcut(const QString &sequence) { settings.setValue("keys/renderer_shortcut", sequence); }
 
 #if CHIAKI_GUI_ENABLE_SPEEX
 		bool GetSpeechProcessingEnabled() const;

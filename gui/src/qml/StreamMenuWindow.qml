@@ -322,18 +322,18 @@ Window {
                 icon.source: "qrc:/icons/settings-20px.svg"
                 onClicked: streamMenuWindow.displaySettingsRequested()
                 KeyNavigation.left: customButton
-                KeyNavigation.right: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom ? placeboSettingsButton : displaySettingsButton
+                KeyNavigation.right: Chiaki.window.rtxSettingsSupported ? placeboSettingsButton : null
                 Keys.onReturnPressed: clicked()
                 Keys.onEscapePressed: streamMenuWindow.closeRequested()
             }
 
             ToolButton {
                 id: placeboSettingsButton
-                text: qsTr("Placebo")
+                visible: Chiaki.window.rtxSettingsSupported
+                text: qsTr("RTX settings (%1)").arg(Chiaki.settings.rendererShortcut)
                 icon.source: "qrc:/icons/settings-20px.svg"
                 padding: 10
                 checkable: false
-                visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
                 onClicked: streamMenuWindow.placeboSettingsRequested()
                 KeyNavigation.left: displaySettingsButton
                 Keys.onReturnPressed: clicked()

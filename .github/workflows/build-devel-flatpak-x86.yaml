@@ -1,4 +1,4 @@
-name: Build chiaki-ng devel flatpak x64
+name: Build chiaki-ngx devel flatpak x64
 
 on:
   workflow_dispatch:
@@ -6,14 +6,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build chiaki-ng devel flatpak_x64
+    name: Build chiaki-ngx devel flatpak_x64
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-          path: 'chiaki-ng'
+          path: 'chiaki-ngx'
 
       - name: Install dependencies
         run: |
@@ -32,26 +32,26 @@ jobs:
           flatpak update --appstream --assumeyes
 
       - name: Build Flatpak package
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
-          flatpak-builder --repo=chiaki-ng-devel --force-clean build-dir scripts/flatpak/chiaki4deck-devel.yaml
+          flatpak-builder --repo=chiaki-ngx-devel --force-clean build-dir scripts/flatpak/chiaki4deck-devel.yaml
 
       - name: Bundle Flatpak app
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
-          flatpak build-bundle chiaki-ng-devel chiaki-ng-devel-x64.flatpak io.github.streetpea.Chiaki4deck-devel --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-          flatpak build-bundle chiaki-ng-devel --runtime chiaki-ng-devel-x64-debug.flatpak io.github.streetpea.Chiaki4deck_devel.Debug --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-      - name: Upload chiaki-ng Artifact
+          flatpak build-bundle chiaki-ngx-devel chiaki-ngx-devel-x64.flatpak io.github.streetpea.Chiaki4deck-devel --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+          flatpak build-bundle chiaki-ngx-devel --runtime chiaki-ngx-devel-x64-debug.flatpak io.github.streetpea.Chiaki4deck_devel.Debug --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-devel-x64.flatpak
-          path: chiaki-ng/chiaki-ng-devel-x64.flatpak
+          name: chiaki-ngx-devel-x64.flatpak
+          path: chiaki-ngx/chiaki-ngx-devel-x64.flatpak
           if-no-files-found: error
           retention-days: 1
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-devel-x64-debug.flatpak
-          path: chiaki-ng/chiaki-ng-devel-x64-debug.flatpak
+          name: chiaki-ngx-devel-x64-debug.flatpak
+          path: chiaki-ngx/chiaki-ngx-devel-x64-debug.flatpak
           if-no-files-found: error
           retention-days: 1

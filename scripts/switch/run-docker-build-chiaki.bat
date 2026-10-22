@@ -5,4 +5,4 @@ docker run --rm ^
         ghcr.io/streetpea/chiaki-build-switch:latest ^
         /bin/bash -c "scripts/switch/build.sh"
 
-if %ErrorLevel% equ 0 (copy build_switch\switch\chiaki.nro build_switch\switch\chiaki-ng.nro)
+if %ErrorLevel% equ 0 (copy build_switch\switch\chiaki.nro build_switch\switch\chiaki-ngx.nro)

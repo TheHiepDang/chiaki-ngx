@@ -1,4 +1,4 @@
-name: Build chiaki-ng pull request
+name: Build chiaki-ngx pull request
 
 on:
   pull_request:
@@ -86,31 +86,31 @@ jobs:
           INSTALL_PREFIX=/mingw64 scripts/build-sdl2-compat.sh .
           cp /mingw64/lib/pkgconfig/sdl2-compat.pc /mingw64/lib/pkgconfig/sdl2.pc
 
-      - name: Configure chiaki-ng
+      - name: Configure chiaki-ngx
         run: |
           cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCHIAKI_ENABLE_CLI=OFF
 
-      - name: Build chiaki-ng
+      - name: Build chiaki-ngx
         run: |
           cmake --build build --config Release --clean-first --target chiaki
           
-      - name: Deploy chiaki-ng
+      - name: Deploy chiaki-ngx
         run: |
-          ./scripts/deploy-windows-msys2.sh chiaki-ng-Win build/gui/chiaki.exe "${{ github.workspace }}/build/third-party/cpp-steam-tools" /mingw64 gui/src/qml
+          ./scripts/deploy-windows-msys2.sh chiaki-ngx-Win build/gui/chiaki.exe "${{ github.workspace }}/build/third-party/cpp-steam-tools" /mingw64 gui/src/qml
 
-      - name: Package chiaki-ng
+      - name: Package chiaki-ngx
         run: |
           CHIAKI_VERSION_MAJOR="$(grep 'CHIAKI_VERSION_MAJOR' CMakeLists.txt | grep -Eo '[0-9]+')"
           CHIAKI_VERSION_MINOR="$(grep 'CHIAKI_VERSION_MINOR' CMakeLists.txt | grep -Eo '[0-9]+')"
           CHIAKI_VERSION_PATCH="$(grep 'CHIAKI_VERSION_PATCH' CMakeLists.txt | grep -Eo '[0-9]+')"
-          RELEASE_PACKAGE_FILE="chiaki-ng-win_x64-MSYS2-portable-$CHIAKI_VERSION_MAJOR.$CHIAKI_VERSION_MINOR.$CHIAKI_VERSION_PATCH-test-build-${{ github.sha }}.zip"
-          zip -r $RELEASE_PACKAGE_FILE chiaki-ng-Win
+          RELEASE_PACKAGE_FILE="chiaki-ngx-win_x64-MSYS2-portable-$CHIAKI_VERSION_MAJOR.$CHIAKI_VERSION_MINOR.$CHIAKI_VERSION_PATCH-test-build-${{ github.sha }}.zip"
+          zip -r $RELEASE_PACKAGE_FILE chiaki-ngx-Win
           echo "RELEASE_PACKAGE_PATH=${RELEASE_PACKAGE_FILE}" >> $GITHUB_ENV
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-win_x64-MSYS2-Release-portable.zip
+          name: chiaki-ngx-win_x64-MSYS2-Release-portable.zip
           path: ${{ env.RELEASE_PACKAGE_PATH }}
           if-no-files-found: error
           retention-days: 7
@@ -118,14 +118,14 @@ jobs:
       - name: Compile .ISS to .EXE Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          path: "scripts/chiaki-ng.iss"
+          path: "scripts/chiaki-ngx.iss"
           options: /O+
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-win_x64-MSYS2-Release-installer.exe
-          path: chiaki-ng-windows-installer.exe
+          name: chiaki-ngx-win_x64-MSYS2-Release-installer.exe
+          path: chiaki-ngx-windows-installer.exe
           if-no-files-found: error
           retention-days: 7
 
@@ -153,53 +153,53 @@ jobs:
           sudo INSTALL_PREFIX=/usr/local scripts/build-sdl2-compat.sh
           sudo cp /usr/local/lib/pkgconfig/sdl2-compat.pc /usr/local/lib/pkgconfig/sdl2.pc
 
-      - name: Configure chiaki-ng
+      - name: Configure chiaki-ngx
         run: |
           cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCHIAKI_ENABLE_CLI=OFF -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF -DOPENSSL_ROOT_DIR="$(brew --prefix)/opt/openssl@3" -DCMAKE_PREFIX_PATH="$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/qt@6;$(brew --prefix)/opt/protobuf@29"
 
-      - name: Build chiaki-ng
+      - name: Build chiaki-ngx
         run: |
           export CPATH=$(brew --prefix)/opt/ffmpeg/include
           cmake --build build --config Release --clean-first --target chiaki
 
-      - name: Deploy chiaki-ng
+      - name: Deploy chiaki-ngx
         run: |
-          rm -rf chiaki-ng.app chiaki-ng.dmg
-          cp -a build/gui/chiaki.app chiaki-ng.app
+          rm -rf chiaki-ngx.app chiaki-ngx.dmg
+          cp -a build/gui/chiaki.app chiaki-ngx.app
           cp scripts/qtwebengine_import.qml gui/src/qml/
-          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ng.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
-          mkdir -p chiaki-ng.app/Contents/Resources/vulkan/icd.d
+          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
+          mkdir -p chiaki-ngx.app/Contents/Resources/vulkan/icd.d
           wget https://github.com/KhronosGroup/MoltenVK/releases/download/v1.2.9/MoltenVK-macos.tar && tar xf MoltenVK-macos.tar
-          cp MoltenVK/MoltenVK/dylib/macOS/* chiaki-ng.app/Contents/Resources/vulkan/icd.d
-          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ng.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
-          ln -s ../../../../../../../Frameworks chiaki-ng.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents
-          cp /usr/local/lib/libSDL3.dylib chiaki-ng.app/Contents/MacOS/libSDL3.dylib
-          cp /usr/local/lib/libSDL2-2.0.0.dylib chiaki-ng.app/Contents/MacOS/libSDL2-2.0.0.dylib
-          install_name_tool -id @executable_path/libSDL3.dylib chiaki-ng.app/Contents/MacOS/libSDL3.dylib
-          install_name_tool -id @executable_path/libSDL2-2.0.0.dylib chiaki-ng.app/Contents/MacOS/libSDL2-2.0.0.dylib
-          install_name_tool -change /usr/local/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ng.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
-          install_name_tool -change @rpath/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ng.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
-          install_name_tool -change /opt/homebrew/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ng.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
-          install_name_tool -change /usr/local/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ng.app/Contents/MacOS/chiaki || true
-          install_name_tool -change @rpath/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ng.app/Contents/MacOS/chiaki || true
-          install_name_tool -change /opt/homebrew/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ng.app/Contents/MacOS/chiaki || true
-          ln -s libvulkan.1.dylib chiaki-ng.app/Contents/Frameworks/vulkan
-          codesign --force --entitlements gui/entitlements.xml --deep --sign - chiaki-ng.app
-          rm -f chiaki-ng.dmg
-          hdiutil create -srcfolder chiaki-ng.app chiaki-ng.dmg
-          codesign --force --entitlements gui/entitlements.xml --deep --sign - chiaki-ng.dmg
-          cp chiaki-ng.dmg chiaki-ng-macos_arm64-Release.dmg
+          cp MoltenVK/MoltenVK/dylib/macOS/* chiaki-ngx.app/Contents/Resources/vulkan/icd.d
+          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
+          ln -s ../../../../../../../Frameworks chiaki-ngx.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents
+          cp /usr/local/lib/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
+          cp /usr/local/lib/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
+          install_name_tool -id @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
+          install_name_tool -id @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
+          install_name_tool -change /usr/local/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
+          install_name_tool -change @rpath/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
+          install_name_tool -change /opt/homebrew/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
+          install_name_tool -change /usr/local/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
+          install_name_tool -change @rpath/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
+          install_name_tool -change /opt/homebrew/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
+          ln -s libvulkan.1.dylib chiaki-ngx.app/Contents/Frameworks/vulkan
+          codesign --force --entitlements gui/entitlements.xml --deep --sign - chiaki-ngx.app
+          rm -f chiaki-ngx.dmg
+          hdiutil create -srcfolder chiaki-ngx.app chiaki-ngx.dmg
+          codesign --force --entitlements gui/entitlements.xml --deep --sign - chiaki-ngx.dmg
+          cp chiaki-ngx.dmg chiaki-ngx-macos_arm64-Release.dmg
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng-macos_arm64-Release.dmg
-          path: chiaki-ng-macos_arm64-Release.dmg
+          name: chiaki-ngx-macos_arm64-Release.dmg
+          path: chiaki-ngx-macos_arm64-Release.dmg
           if-no-files-found: error
           retention-days: 7
 
   build-appimage_x64:
-    name: Build chiaki-ng appimage_x64
+    name: Build chiaki-ngx appimage_x64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -214,15 +214,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-          path: 'chiaki-ng'
+          path: 'chiaki-ngx'
 
       - name: Add QmlWebEngine Import
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           cp scripts/qtwebengine_import.qml gui/src/qml/
 
       - name: Run build script
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           set -xe
           podman run --rm \
@@ -232,18 +232,18 @@ jobs:
             --cap-add SYS_ADMIN \
             -t docker.io/streetpea/chiaki-ng-builder:qt6.9 \
             /bin/bash -c "sudo -E scripts/build-appimage.sh /build/appdir"
-          cp appimage/chiaki-ng.AppImage appimage/chiaki-ng.AppImage_x86_64
+          cp appimage/chiaki-ngx.AppImage appimage/chiaki-ngx.AppImage_x86_64
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng.AppImage_x86_64
-          path: chiaki-ng/appimage/chiaki-ng.AppImage_x86_64
+          name: chiaki-ngx.AppImage_x86_64
+          path: chiaki-ngx/appimage/chiaki-ngx.AppImage_x86_64
           if-no-files-found: error
           retention-days: 7
 
   build-appimage_arm64:
-    name: Build chiaki-ng appimage_arm64
+    name: Build chiaki-ngx appimage_arm64
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
@@ -257,15 +257,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-          path: 'chiaki-ng'
+          path: 'chiaki-ngx'
 
       - name: Add QmlWebEngine Import
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           cp scripts/qtwebengine_import.qml gui/src/qml/
 
       - name: Run build script
-        working-directory: chiaki-ng
+        working-directory: chiaki-ngx
         run: |
           set -xe
           podman run --rm \
@@ -275,12 +275,12 @@ jobs:
             --cap-add SYS_ADMIN \
             -t docker.io/streetpea/chiaki-ng-builder:qt6.7 \
             /bin/bash -c "sudo -E scripts/build-appimage.sh /build/appdir"
-          cp appimage/chiaki-ng.AppImage appimage/chiaki-ng.AppImage_arm64
+          cp appimage/chiaki-ngx.AppImage appimage/chiaki-ngx.AppImage_arm64
 
-      - name: Upload chiaki-ng Artifact
+      - name: Upload chiaki-ngx Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiaki-ng.AppImage_arm64
-          path: chiaki-ng/appimage/chiaki-ng.AppImage_arm64
+          name: chiaki-ngx.AppImage_arm64
+          path: chiaki-ngx/appimage/chiaki-ngx.AppImage_arm64
           if-no-files-found: error
           retention-days: 7

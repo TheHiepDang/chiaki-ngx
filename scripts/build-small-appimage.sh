@@ -71,4 +71,4 @@ else
         --output appimage
 fi
 
-mv chiaki-ng-${ARCH}.AppImage chiaki-ng.AppImage
+mv chiaki-ngx-${ARCH}.AppImage chiaki-ngx.AppImage
