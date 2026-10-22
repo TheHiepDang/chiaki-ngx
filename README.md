@@ -8,7 +8,7 @@ For PlayStation setup and general help, see the [original documentation](https:/
 
 ## Installation
 
-1. Download the latest **Windows release ZIP** from [Releases](https://github.com/TheHiepDang/chiaki-ngx/releases) and extract it.
+1. Download the latest **chiaki-ngx.zipP** from [Releases](https://github.com/TheHiepDang/chiaki-ngx/releases) and extract it.
 3. Supply your own **`nvngx_dlssnr.dll`** in **`runtimes/`**.
 
 Check [NVIDIA’s DLSS SDK](https://github.com/NVIDIA/DLSS) or [TechPowerUp](https://www.techpowerup.com/download/nvidia-dlss-dll/) for latest DLSS.
@@ -17,7 +17,8 @@ RTX 40/50 use native FG. RTX 20/30 use the bundled unofficial SM86 route.
 
 ## Showcase
 
-Videos and screenshots coming soon.
+[![Watch the video](https://img.youtube.com/vi/tHVEoDi1oKc/hqdefault.jpg)](https://www.youtube.com/watch?v=tHVEoDi1oKc)
+
 
 ## Credits
 
