@@ -17,8 +17,15 @@ RTX 40/50 use native FG. RTX 20/30 use the bundled unofficial SM86 route.
 
 ## Showcase
 
+Video show case DLSS5, Upscaler and Framegen with Dragon's Dogma 2:
+
 [![Watch the video](https://img.youtube.com/vi/tHVEoDi1oKc/hqdefault.jpg)](https://www.youtube.com/watch?v=tHVEoDi1oKc)
 
+Native NR (100% resolution) vs. Upscaled NR (75% resolution, 30-40% performance gain) comparison:
+
+![Native NR](<assets/github demo images/native nr.png>)
+
+![Upscaled NR](<assets/github demo images/upscaled nr.png>)
 
 ## Credits
 
