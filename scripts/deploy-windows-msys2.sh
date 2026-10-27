@@ -113,6 +113,9 @@ done
 shopt -u nullglob
 
 windeployqt6.exe --release --no-translations --qmldir="$qml_dir" "$output_dir/$(basename "$exe_path")"
+# windeployqt only selects qwindows by default; packaged headless verification needs offscreen.
+mkdir -p "$output_dir/platforms"
+cp "$msys_prefix/share/qt6/plugins/platforms/qoffscreen.dll" "$output_dir/platforms/"
 cat > "$output_dir/qt.conf" <<'CONF'
 [Paths]
 Prefix=.

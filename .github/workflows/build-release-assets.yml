@@ -137,7 +137,7 @@ jobs:
       - name: Install container tool and desktop runtime baseline
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman libvulkan1 libegl1 libgl1
+          sudo apt-get install -y podman libvulkan1 libegl1 libgl1 libva2 libva-drm2 libva-x11-2
       - name: Build with the existing AppImage toolchain
         run: |
           image=$(python3 -c 'import json; print(json.load(open("scripts/ci/dependencies.json"))["linux_image"])')

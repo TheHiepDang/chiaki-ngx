@@ -186,6 +186,7 @@ jobs:
         shell: pwsh
         run: |
           "[Paths]`nPrefix=.`nPlugins=.`nQmlImports=qml`nQml2Imports=qml`nLibraryExecutables=.`n" | Set-Content chiaki-ngx-Win/qt.conf
+          Copy-Item (Join-Path $env:QT_PLUGIN_PATH "platforms/qoffscreen.dll") chiaki-ngx-Win/platforms/
           ./scripts/ci/verify-windows.ps1 -Directory chiaki-ngx-Win -BaselineOnly
 
       - name: Package chiaki-ngx

@@ -30,7 +30,10 @@ jobs:
       - name: Install non-Qt dependencies and verify SDK
         run: |
           brew install ffmpeg pkgconf opus openssl@3 cmake ninja nasm protobuf@29 speexdsp libplacebo wget python-setuptools json-c miniupnpc libevent
-          python3 -m pip install 'protobuf==5.29.5' --break-system-packages
+          python3 -m venv "$RUNNER_TEMP/chiaki-python"
+          "$RUNNER_TEMP/chiaki-python/bin/python3" -m pip install 'protobuf==5.29.6'
+          echo "CHIAKI_PYTHON=$RUNNER_TEMP/chiaki-python" >> "$GITHUB_ENV"
+          echo 'PYTHONPATH=' >> "$GITHUB_ENV"
           test "$("$QT_ROOT_DIR/bin/qmake" -query QT_VERSION)" = '6.9.3'
           test -f "$QT_ROOT_DIR/lib/cmake/Qt6WebEngineQuick/Qt6WebEngineQuickConfig.cmake"
           brew list --versions
@@ -46,6 +49,7 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCHIAKI_ENABLE_CLI=OFF -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF \
             -DOPENSSL_ROOT_DIR="$(brew --prefix)/opt/openssl@3" \
+            -DPYTHON_EXECUTABLE="$CHIAKI_PYTHON/bin/python3" \
             -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
             -DCMAKE_REQUIRE_FIND_PACKAGE_Qt6WebEngineQuick=ON \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$SDL_RELEASE_PREFIX;$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/protobuf@29" \

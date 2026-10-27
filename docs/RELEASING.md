@@ -71,7 +71,7 @@ git push origin refs/tags/v0.2.0
 Use `v0.2.0-rc.1` instead for a prerelease. Any valid prerelease suffix creates a GitHub
 prerelease and is not marked Latest. Stable tags use GitHub's version-based Latest policy.
 Tags must be `vMAJOR.MINOR.PATCH[-prerelease]`, without numeric leading zeroes or `+metadata`;
-each main numeric component must fit Windows' 0â€“65535 resource range. Both stable and RC
+each main numeric component must fit Windows' 0ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“65535 resource range. Both stable and RC
 commits must already be reachable from remote `main`.
 
 CI overlays `cmake/Version.txt` with the tag's version before configuring either platform.
@@ -146,6 +146,13 @@ sha256sum --check SHA256SUMS
 Compare provenance's source commit with `git rev-parse 'v0.2.0^{commit}'`. Checksums detect
 corruption; they are not independent signatures. Windows installer and binaries are unsigned
 unless a separate signing process is configured.
+
+
+Linux runtime baseline: the inherited AppImage recipe deliberately excludes the host's Vulkan
+and LibVA driver interfaces. SteamOS normally provides them. On Debian/Ubuntu desktops install
+`libvulkan1 libva2 libva-drm2 libva-x11-2 libegl1 libgl1` and the GPU vendor's driver. CI installs
+these same system interfaces before the outside-container startup test; it does not install Qt
+or borrow libraries from the build container. No video-decoding feature is disabled.
 
 ## Dependencies and maintenance
 
