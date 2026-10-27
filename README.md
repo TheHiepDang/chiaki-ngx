@@ -2,7 +2,9 @@
 
 # chiaki-ngx
 
-A fork of [chiaki-ng](https://github.com/chiaki-ng/chiaki-ng), aiming to deliver next-generation features and more.
+A fork of [chiaki-ng](https://github.com/chiaki-ng/chiaki-ng), DLSS5, Upscaler and Framegen for all RTX GPUs.
+
+Tested on RTX 3000s.
 
 For PlayStation setup and general help, see the [original documentation](https://chiaki-ng.github.io/chiaki-ng/).
 
@@ -23,8 +25,15 @@ Each pass offers **Default / Natural / Cinematic** NR presets, **Intensity**, **
 
 ## Showcase
 
+Video show case DLSS5, Upscaler and Framegen with Dragon's Dogma 2:
+
 [![Watch the video](https://img.youtube.com/vi/tHVEoDi1oKc/hqdefault.jpg)](https://www.youtube.com/watch?v=tHVEoDi1oKc)
 
+Native NR (100% resolution) vs. Upscaled NR (75% resolution, 30-40% performance gain) comparison:
+
+![Native NR](<assets/github demo images/native nr.png>)
+
+![Upscaled NR](<assets/github demo images/upscaled nr.png>)
 
 ## Bug reports
 
