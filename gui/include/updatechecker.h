@@ -69,6 +69,8 @@ private:
     void requestPage(int page,quint64 generation);
     bool drainDownload();
 protected:
+    // Platform capability seam lets download fixtures exercise every gate on any host.
+    virtual bool supportsInstallation() const;
     virtual QString installerPath() const;
     virtual QString cacheRoot() const;
     virtual void prepareInstaller();

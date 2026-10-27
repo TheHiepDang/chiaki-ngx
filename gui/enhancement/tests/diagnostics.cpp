@@ -9,12 +9,13 @@
 #include <QTemporaryDir>
 #include <QProcess>
 #include <QDebug>
+#include <cstdio>
 #include <thread>
 #include <vector>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
-#define CHECK(x) do { if (!(x)) { qCritical() << "FAIL" << __LINE__ << #x; DiagnosticLog::shutdown(); return 1; } } while (0)
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "[Test][Diagnostics] FAIL %d %s\n", __LINE__, #x); qCritical() << "FAIL" << __LINE__ << #x; DiagnosticLog::shutdown(); return 1; } } while (0)
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
 #ifdef Q_OS_WIN
@@ -46,9 +47,9 @@ int main(int argc, char **argv) {
     CHECK(worker.append("[RTX][NR] frag").isEmpty());
     const auto fragments = worker.append("ment\nplain worker line\n");
     CHECK(fragments.size() == 2 && fragments[0] == "[RTX][NR] fragment" && fragments[1] == "[RTX][Worker] plain worker line");
-    const auto utf8 = QString::fromUtf8("[RTX][NR] café\n").toUtf8();
+    const auto utf8 = QString::fromUtf8("[RTX][NR] cafÃ©\n").toUtf8();
     CHECK(worker.append(utf8.left(utf8.size()-2)).isEmpty());
-    CHECK(worker.append(utf8.right(2)) == QStringList{QString::fromUtf8("[RTX][NR] café")});
+    CHECK(worker.append(utf8.right(2)) == QStringList{QString::fromUtf8("[RTX][NR] cafÃ©")});
     CHECK(worker.append("access_token=worker-secret").isEmpty());
     for (const auto &line : worker.append(" Bearer worker-bearer\n")) DiagnosticLog::record(QtWarningMsg,line);
     CHECK(worker.append("last fragment").isEmpty());

@@ -36,8 +36,11 @@ jobs:
           brew list --versions
       - name: Build SDL compatibility runtimes
         run: |
-          INSTALL_PREFIX="$(brew --prefix)" bash scripts/build-sdl2-compat.sh .
-          cp "$(brew --prefix)/lib/pkgconfig/sdl2-compat.pc" "$(brew --prefix)/lib/pkgconfig/sdl2.pc"
+          prefix="$RUNNER_TEMP/chiaki-sdl"
+          INSTALL_PREFIX="$prefix" bash scripts/build-sdl2-compat.sh .
+          cp "$prefix/lib/pkgconfig/sdl2-compat.pc" "$prefix/lib/pkgconfig/sdl2.pc"
+          echo "SDL_RELEASE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$prefix/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Configure chiaki-ngx with required WebEngine
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -45,7 +48,7 @@ jobs:
             -DOPENSSL_ROOT_DIR="$(brew --prefix)/opt/openssl@3" \
             -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
             -DCMAKE_REQUIRE_FIND_PACKAGE_Qt6WebEngineQuick=ON \
-            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/protobuf@29" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$SDL_RELEASE_PREFIX;$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/protobuf@29" \
             -DCMAKE_IGNORE_PREFIX_PATH="$(brew --prefix)/opt/qt@6;$(brew --prefix)/opt/qt"
       - name: Build and test chiaki-ngx
         run: |
@@ -63,8 +66,9 @@ jobs:
           cp MoltenVK/MoltenVK/dylib/macOS/* chiaki-ngx.app/Contents/Resources/vulkan/icd.d
           "$QT_ROOT_DIR/bin/macdeployqt" chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
           ln -sfn ../../../../../../../Frameworks chiaki-ngx.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents
-          cp $(brew --prefix)/lib/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
-          cp $(brew --prefix)/lib/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
+          cp "$SDL_RELEASE_PREFIX/lib/libSDL3.dylib" chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
+          cp "$SDL_RELEASE_PREFIX/lib/libSDL2-2.0.0.dylib" chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
+          install_name_tool -change "$SDL_RELEASE_PREFIX/lib/libSDL3.dylib" @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
           install_name_tool -id @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
           install_name_tool -id @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
           install_name_tool -change $(brew --prefix)/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true

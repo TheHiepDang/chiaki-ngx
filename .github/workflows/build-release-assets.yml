@@ -53,6 +53,7 @@ jobs:
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       COMMIT: ${{ needs.prepare.outputs.commit }}
+      QT_FORCE_STDERR_LOGGING: '1'
     steps:
       - name: Use LF for scripts
         run: git config --global core.autocrlf false
@@ -124,6 +125,7 @@ jobs:
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       COMMIT: ${{ needs.prepare.outputs.commit }}
+      QT_FORCE_STDERR_LOGGING: '1'
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
         with:

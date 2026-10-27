@@ -47,6 +47,7 @@ public:
         QDir().mkpath(directory);QFile file(helper_);file.open(QIODevice::WriteOnly);file.write("fixture");
     }
 protected:
+    bool supportsInstallation() const override {return true;}
     QString installerPath() const override {return helper_;}
     QString cacheRoot() const override {return directory_;}
     void prepareInstaller() override {prepared=true;}
@@ -119,6 +120,15 @@ int main(int argc,char **argv) {
     CHECK(modernNetwork.requests[0].path()=="/repos/TheHiepDang/chiaki-ngx/releases");
     modernNetwork.responses.append({modernList});modernChecker.setChannel("prerelease");CHECK(until([&]{return !modernChecker.busy();}));
     CHECK(modernChecker.availableVersion()=="0.3.0-rc.1");
+    // The fixture overrides capability, not validation; verify real platform policy separately.
+    Network nativeNetwork;UpdateChecker native(nullptr,&nativeNetwork,false,"0.1");
+    nativeNetwork.responses.append({body(QJsonArray{release("0.2.0")})});native.checkForUpdates();CHECK(until([&]{return !native.busy();}));
+    CHECK(native.available());
+#if defined(Q_OS_WIN) && defined(Q_PROCESSOR_X86_64)
+    CHECK(native.canInstall());
+#else
+    CHECK(!native.canInstall());
+#endif
     qInfo()<<"PASS release ordering/channels/legacy baseline, canonical production tags/assets, startup checks, stale replies, errors, streaming gate and verified downloads";
     return 0;
 }
