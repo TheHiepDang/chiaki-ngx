@@ -63,6 +63,7 @@ QmlSettings::QmlSettings(Settings *settings, QObject *parent)
     diagnostic_settings_timer.setSingleShot(true);
     diagnostic_settings_timer.setInterval(750);
     connect(&diagnostic_settings_timer, &QTimer::timeout, this, &QmlSettings::logDiagnosticSettings);
+    connect(this, &QmlSettings::enhancementChanged, this, &QmlSettings::enhancementControlsChanged);
     connect(this, &QmlSettings::enhancementChanged, this, [this] { diagnostic_settings_timer.start(); });
     connect(this, &QmlSettings::eyeCandyChanged, this, [this] { diagnostic_settings_timer.start(); });
     connect(this, &QmlSettings::placeboColorAdjustmentEnabledChanged, this, [this] { diagnostic_settings_timer.start(); });
@@ -76,7 +77,7 @@ QmlSettings::QmlSettings(Settings *settings, QObject *parent)
     enhancement_percent_timer.setTimerType(Qt::PreciseTimer);
     enhancement_percent_timer.setInterval(3000);
     connect(&enhancement_percent_timer, &QTimer::timeout, this, [this]() {
-        setEnhancementPercent(enhancement_percent_preview);
+        commitEnhancementPercents();
     });
     if (settings->GetLogVerbose())
         QLoggingCategory::setFilterRules(QStringLiteral("chiaki.gui.debug=true"));
@@ -1891,7 +1892,9 @@ QString QmlSettings::changeControllerKey(int button, int key)
 void QmlSettings::setSettings(Settings *new_settings)
 {
     enhancement_percent_timer.stop();
-    enhancement_percent_preview = -1;
+    enhancement_percent_previews.fill(-1);
+    enhancement_editing_pass = 0;
+    emit enhancementPassSelectionChanged();
     settings = new_settings;
     connect(settings, &Settings::RegisteredHostsUpdated, this, &QmlSettings::registeredHostsChanged);
     connect(settings, &Settings::ProfilesUpdated, this, &QmlSettings::profilesChanged);
@@ -1902,7 +1905,9 @@ void QmlSettings::refreshAllKeys()
 {
     emit eyeCandyChanged();
     enhancement_percent_timer.stop();
-    enhancement_percent_preview = -1;
+    enhancement_percent_previews.fill(-1);
+    enhancement_editing_pass = 0;
+    emit enhancementPassSelectionChanged();
     emit enhancementPercentPreviewChanged();
     emit enhancementChanged();
     emit remotePlayAskChanged();
@@ -2130,39 +2135,122 @@ void QmlSettings::importPlaceboSettings()
     refreshAllPlaceboKeys();
 }
 
+bool QmlSettings::enhancementCustomizePasses() const { return settings->GetEnhancementCustomizePasses(); }
+void QmlSettings::setEnhancementCustomizePasses(bool value)
+{
+    if (value == enhancementCustomizePasses()) return;
+    if (!value) {
+        const bool discarded = enhancement_percent_previews[1] >= 0 || enhancement_percent_previews[2] >= 0;
+        enhancement_percent_previews[1] = enhancement_percent_previews[2] = -1;
+        if (discarded) qInfo() << "[RTX][NR] discarded pending custom resolutions; passes follow pass 1";
+    }
+    settings->SetEnhancementCustomizePasses(value);
+    if (!value) setEnhancementEditingPass(0);
+    if (!enhancementResolutionPending()) enhancement_percent_timer.stop();
+    qInfo() << "[RTX][NR] customize_each_pass=" << value;
+    emit enhancementChanged();
+    emit enhancementPercentPreviewChanged();
+}
+int QmlSettings::enhancementNrPreset() const { return int(settings->GetEnhancementPassTuning(enhancement_editing_pass).style); }
+float QmlSettings::enhancementIntensity() const { return settings->GetEnhancementPassTuning(enhancement_editing_pass).intensity; }
+void QmlSettings::setEnhancementIntensity(float value)
+{ if (!std::isfinite(value)) return; auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.intensity = qBound(0.0f, value, 1.0f); setEnhancementTuning(tuning); }
+float QmlSettings::enhancementLocalStructure() const { return settings->GetEnhancementPassTuning(enhancement_editing_pass).localStructure; }
+float QmlSettings::enhancementLocalTone() const { return settings->GetEnhancementPassTuning(enhancement_editing_pass).localTone; }
+float QmlSettings::enhancementSkinStructure() const { return settings->GetEnhancementPassTuning(enhancement_editing_pass).skinStructure; }
+bool QmlSettings::enhancementAutomaticMask() const { return bool(settings->GetEnhancementPassTuning(enhancement_editing_pass).autoMask); }
+void QmlSettings::setEnhancementTuning(const chiaki_enhancement::NrTuning &value)
+{
+    if (!chiaki_enhancement::validTuning(value) || value == settings->GetEnhancementPassTuning(enhancement_editing_pass)) return;
+    settings->SetEnhancementPassTuning(enhancement_editing_pass, value);
+    emit enhancementChanged();
+}
+void QmlSettings::setEnhancementNrPreset(int value)
+{ auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.style = unsigned(qBound(0, value, 2)); setEnhancementTuning(tuning); }
+void QmlSettings::setEnhancementLocalStructure(float value)
+{ if (!std::isfinite(value)) return; auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.localStructure = qBound(0.0f, value, 2.0f); setEnhancementTuning(tuning); }
+void QmlSettings::setEnhancementLocalTone(float value)
+{ if (!std::isfinite(value)) return; auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.localTone = qBound(0.0f, value, 2.0f); setEnhancementTuning(tuning); }
+void QmlSettings::setEnhancementSkinStructure(float value)
+{ if (!std::isfinite(value)) return; auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.skinStructure = qBound(-1.0f, value, 2.5f); setEnhancementTuning(tuning); }
+void QmlSettings::setEnhancementAutomaticMask(bool value)
+{ auto tuning = settings->GetEnhancementPassTuning(enhancement_editing_pass); tuning.autoMask = value ? 1u : 0u; setEnhancementTuning(tuning); }
+
+int QmlSettings::enhancementPassCount() const { return settings->GetEnhancementPassCount(); }
+void QmlSettings::setEnhancementPassCount(int value)
+{
+    value = qBound(1, value, 3);
+    if (value == enhancementPassCount()) return;
+    settings->SetEnhancementPassCount(value);
+    if (enhancement_editing_pass >= value) setEnhancementEditingPass(value - 1);
+    qInfo() << "[RTX][NR] requested_pass_count=" << value;
+    emit enhancementChanged();
+}
+int QmlSettings::enhancementEditingPass() const { return enhancement_editing_pass; }
+void QmlSettings::setEnhancementEditingPass(int value)
+{
+    value = enhancementCustomizePasses() ? qBound(0, value, enhancementPassCount() - 1) : 0;
+    if (value == enhancement_editing_pass) return;
+    enhancement_editing_pass = value;
+    emit enhancementPassSelectionChanged();
+    emit enhancementControlsChanged();
+    emit enhancementPercentPreviewChanged();
+}
+bool QmlSettings::enhancementResolutionPending() const
+{
+    for (int value : enhancement_percent_previews) if (value >= 0) return true;
+    return false;
+}
 bool QmlSettings::enhancementNeural() const { return settings->GetEnhancementNeural(); }
 int QmlSettings::eyeCandyExposure() const { return settings->GetEyeCandyExposure(); }
 void QmlSettings::setEyeCandyExposure(int value) { settings->SetEyeCandyExposure(value); emit eyeCandyChanged(); }
 int QmlSettings::eyeCandyDarkArea() const { return settings->GetEyeCandyDarkArea(); }
 void QmlSettings::setEyeCandyDarkArea(int value) { settings->SetEyeCandyDarkArea(value); emit eyeCandyChanged(); }
 void QmlSettings::setEnhancementNeural(bool value) { settings->SetEnhancementNeural(value); emit enhancementChanged(); }
-int QmlSettings::enhancementPercent() const { return settings->GetEnhancementPercent(); }
+int QmlSettings::enhancementPercent() const { return settings->GetEnhancementPassPercent(enhancement_editing_pass); }
 void QmlSettings::setEnhancementPercent(int value)
 {
-    enhancement_percent_timer.stop();
-    enhancement_percent_preview = -1;
-    if (settings->GetEnhancementPercent() != qBound(50, value, 100)) {
-        qInfo() << "[RTX][NRResolution] committed_percent=" << qBound(50, value, 100);
-        settings->SetEnhancementPercent(value);
+    enhancement_percent_previews[enhancement_editing_pass] = -1;
+    if (!enhancementResolutionPending()) enhancement_percent_timer.stop();
+    value = qBound(50, value, 100);
+    if (enhancementPercent() != value) {
+        settings->SetEnhancementPassPercent(enhancement_editing_pass, value);
+        qInfo() << "[RTX][NRResolution] pass=" << enhancement_editing_pass + 1 << "percent=" << value;
         emit enhancementChanged();
     }
     emit enhancementPercentPreviewChanged();
 }
 int QmlSettings::enhancementPercentPreview() const
 {
-    return enhancement_percent_preview < 0 ? enhancementPercent() : enhancement_percent_preview;
+    const int preview = enhancement_percent_previews[enhancement_editing_pass];
+    return preview < 0 ? enhancementPercent() : preview;
 }
 void QmlSettings::queueEnhancementPercent(int value)
 {
     if (!enhancement_percent_timer.isActive()) qInfo() << "[RTX][NRResolution] adjustment started; applies after 3000 ms idle";
-    enhancement_percent_preview = qBound(50, value, 100);
+    enhancement_percent_previews[enhancement_editing_pass] = qBound(50, value, 100);
     enhancement_percent_timer.start();
     emit enhancementPercentPreviewChanged();
 }
-bool QmlSettings::enhancementFsr() const { return settings->GetEnhancementFsr(); }
-void QmlSettings::setEnhancementFsr(bool value) { settings->SetEnhancementFsr(value); emit enhancementChanged(); }
-int QmlSettings::enhancementSharpness() const { return settings->GetEnhancementSharpness(); }
-void QmlSettings::setEnhancementSharpness(int value) { settings->SetEnhancementSharpness(value); emit enhancementChanged(); }
+void QmlSettings::commitEnhancementPercents()
+{
+    bool changed = false;
+    for (int pass = 0; pass < 3; ++pass) {
+        const int value = enhancement_percent_previews[pass];
+        if (value >= 0 && value != settings->GetEnhancementPassPercent(pass)) {
+            settings->SetEnhancementPassPercent(pass, value);
+            qInfo() << "[RTX][NRResolution] pass=" << pass + 1 << "percent=" << value << "applied after idle";
+            changed = true;
+        }
+    }
+    enhancement_percent_previews.fill(-1);
+    if (changed) emit enhancementChanged();
+    emit enhancementPercentPreviewChanged();
+}
+bool QmlSettings::enhancementFsr() const { return settings->GetEnhancementPassFsr(enhancement_editing_pass); }
+void QmlSettings::setEnhancementFsr(bool value) { settings->SetEnhancementPassFsr(enhancement_editing_pass, value); emit enhancementChanged(); }
+int QmlSettings::enhancementSharpness() const { return settings->GetEnhancementPassSharpness(enhancement_editing_pass); }
+void QmlSettings::setEnhancementSharpness(int value) { settings->SetEnhancementPassSharpness(enhancement_editing_pass, value); emit enhancementChanged(); }
 bool QmlSettings::enhancementFrameGeneration() const { return settings->GetEnhancementFrameGeneration(); }
 void QmlSettings::setEnhancementFrameGeneration(bool value) { settings->SetEnhancementFrameGeneration(value); emit enhancementChanged(); }
 
@@ -2209,9 +2297,16 @@ void QmlSettings::resetScreenshotShortcut()
 
 void QmlSettings::logDiagnosticSettings()
 {
-    qInfo().nospace() << "[RTX][Config] nr=" << enhancementNeural() << " scale=" << enhancementPercent()
-        << " fsr=" << enhancementFsr() << " sharpness=" << enhancementSharpness()
-        << " fg=" << enhancementFrameGeneration();
+    qInfo().nospace() << "[RTX][Config] nr=" << enhancementNeural() << " passes=" << enhancementPassCount()
+        << " customize_each_pass=" << enhancementCustomizePasses() << " fg=" << enhancementFrameGeneration();
+    for (int pass = 0; pass < enhancementPassCount(); ++pass) {
+        const auto p = settings->GetEnhancementEffectivePassConfig(pass);
+        qInfo().noquote() << QStringLiteral("[RTX][NR][Pass%1]").arg(pass + 1)
+                << "percent=" << p.percent << "fsr=" << p.fsr << "sharpness=" << p.sharpness
+                << "preset=" << p.tuning.style << "local_structure=" << p.tuning.localStructure
+                << "local_tone=" << p.tuning.localTone << "skin_structure=" << p.tuning.skinStructure
+                << "automatic_mask=" << p.tuning.autoMask << "intensity=" << p.tuning.intensity;
+    }
     qInfo().nospace() << "[EyeCandy][Config] enabled=" << placeboColorAdjustmentEnabled()
         << " eye_preset=" << placeboColorAdjustmentPreset() << " brightness=" << placeboColorAdjustmentBrightness()
         << " contrast=" << placeboColorAdjustmentContrast() << " saturation=" << placeboColorAdjustmentSaturation()

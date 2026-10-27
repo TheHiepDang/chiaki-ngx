@@ -265,13 +265,13 @@ struct Gpu
         check(queue->GetTimestampFrequency(&timestampFrequency), "Timestamp frequency");
         D3D12_QUERY_HEAP_DESC qh{};
         qh.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
-        qh.Count = 6;
+        qh.Count = MaxNrPasses * 4 + 2;
         check(device->CreateQueryHeap(&qh, IID_PPV_ARGS(&timestamps)), "Timestamp query heap");
         D3D12_HEAP_PROPERTIES rh{};
         rh.Type = D3D12_HEAP_TYPE_READBACK;
         D3D12_RESOURCE_DESC rb{};
         rb.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        rb.Width = 48;
+        rb.Width = (MaxNrPasses * 4 + 2) * sizeof(uint64_t);
         rb.Height = 1;
         rb.DepthOrArraySize = 1;
         rb.MipLevels = 1;
@@ -351,17 +351,17 @@ struct Gpu
     }
     void resolveTimers()
     {
-        list->ResolveQueryData(timestamps.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, 6,
+        list->ResolveQueryData(timestamps.Get(), D3D12_QUERY_TYPE_TIMESTAMP, 0, MaxNrPasses * 4 + 2,
                                timestampReadback.Get(), 0);
     }
-    std::array<uint64_t, 3> timings()
+    std::array<uint64_t, MaxNrPasses * 2 + 1> timings()
     {
         UINT64 *data = nullptr;
-        D3D12_RANGE range{0, 48};
+        D3D12_RANGE range{0, (MaxNrPasses * 4 + 2) * sizeof(uint64_t)};
         check(timestampReadback->Map(0, &range, reinterpret_cast<void **>(&data)),
               "Map timestamps");
-        std::array<uint64_t, 3> times{};
-        for (unsigned n = 0; n < 3; ++n)
+        std::array<uint64_t, MaxNrPasses * 2 + 1> times{};
+        for (unsigned n = 0; n < times.size(); ++n)
             times[n] = (data[n * 2 + 1] - data[n * 2]) * 1000000 / timestampFrequency;
         D3D12_RANGE empty{0, 0};
         timestampReadback->Unmap(0, &empty);
@@ -568,6 +568,13 @@ struct NgxFeature
     Release release = nullptr;
     Shutdown shutdown = nullptr;
     bool initialized = false;
+    std::shared_ptr<NgxFeature> runtimeOwner;
+    void shareRuntime(const std::shared_ptr<NgxFeature> &owner)
+    {
+        runtimeOwner = owner;
+        create = owner->create; evaluate = owner->evaluate; release = owner->release;
+        device = owner->device;
+    }
     ~NgxFeature()
     {
         if (handle && release)
@@ -767,15 +774,29 @@ struct Slot
     ComPtr<ID3D12Fence> fence;
     uint64_t lastValue = 0;
 };
+struct NrStage
+{
+    std::shared_ptr<NgxFeature> feature;
+    NrPassConfig appliedSettings;
+    bool settingsApplied = false;
+    Texture reduced, edited, motion, depth, upInput, upOutput, composite;
+};
 struct Worker
 {
     std::unique_ptr<Gpu> gpu;
     std::array<Slot, SlotCount> resources;
-    std::unique_ptr<NgxFeature> nr, fg;
+    std::unique_ptr<NgxFeature> fg;
+    std::array<NrStage, MaxNrPasses> nrStages;
+    bool hasNr() const { return bool(nrStages[0].feature); }
+    void clearNr()
+    {
+        // Release every handle (and the shared module owner) before its input textures.
+        for (auto &stage : nrStages) stage.feature.reset();
+        for (auto &stage : nrStages) stage = NrStage{};
+    }
     std::unique_ptr<OpticalFlow> optical;
     HMODULE proxy = nullptr;
-    Texture reduced, edited, motion, depth, fullMotion, fullDepth, upInput, upOutput, composite,
-        fgReal, thumbnail;
+    Texture fullMotion, fullDepth, fgReal, thumbnail;
     std::vector<uint8_t> previousThumbnail, previousRealPixels;
     Command config{};
     fs::path runtimeDir;
@@ -796,7 +817,7 @@ struct Worker
             {
             }
             fg.reset();
-            nr.reset();
+            clearNr();
             optical.reset();
         }
         if (proxy)
@@ -834,17 +855,40 @@ struct Worker
         reply.height = extent.height;
         if (c.flags & Neural)
         {
+            unsigned creatingPass = 0;
             try
             {
-                nr.reset(new NgxFeature);
-                nr->load(*gpu, runtimeDir / L"nvngx_dlssnr.dll");
-                nr->make(*gpu, 18, extent.width, extent.height, false);
+                for (; creatingPass < c.nrPassCount; ++creatingPass)
+                {
+                    auto &stage = nrStages[creatingPass];
+                    const auto settings = passConfig(c, creatingPass);
+                    const auto size = nrExtent(c.width, c.height, settings.percent);
+                    stage.feature = std::make_shared<NgxFeature>();
+                    if (creatingPass == 0) stage.feature->load(*gpu, runtimeDir / L"nvngx_dlssnr.dll");
+                    else stage.feature->shareRuntime(nrStages[0].feature);
+                    stage.feature->make(*gpu, 18, size.width, size.height, false);
+                    for (unsigned previous = 0; previous < creatingPass; ++previous) {
+                        if (stage.feature->handle == nrStages[previous].feature->handle) {
+                            stage.feature->handle = nullptr; // Do not release an already-owned handle twice.
+                            throw std::runtime_error("NR runtime did not allocate an independent pass history");
+                        }
+                    }
+                    stage.reduced = gpu->texture(size.width, size.height);
+                    stage.edited = gpu->texture(size.width, size.height);
+                    stage.motion = gpu->texture(size.width, size.height, DXGI_FORMAT_R16G16_FLOAT);
+                    stage.depth = gpu->texture(size.width, size.height, DXGI_FORMAT_R32_FLOAT);
+                    stage.upInput = gpu->texture(c.width, c.height);
+                    stage.upOutput = gpu->texture(c.width, c.height);
+                    stage.composite = gpu->texture(c.width, c.height);
+                    std::fprintf(stderr, "[RTX][NR][Pass%u] created %ux%u percent=%u fsr=%u sharpness=%u\n",
+                        creatingPass + 1, size.width, size.height, settings.percent, settings.fsr, settings.sharpness);
+                }
             }
             catch (const std::exception &e)
             {
-                nrError = e.what();
-                nr.reset();
-                std::fprintf(stderr, "[RTX][NR] %s\n", e.what());
+                nrError = "Pass " + std::to_string(creatingPass + 1) + ": " + e.what();
+                clearNr();
+                std::fprintf(stderr, "[RTX][NR] chain disabled: %s\n", nrError.c_str());
             }
         }
         if (c.flags & FrameGeneration)
@@ -878,7 +922,7 @@ struct Worker
                 std::fprintf(stderr, "[RTX][FG] %s\n", e.what());
             }
         }
-        if (nr || fg)
+        if (hasNr() || fg)
         {
             try
             {
@@ -888,20 +932,10 @@ struct Worker
             catch (const std::exception &e)
             {
                 nrError = fgError = e.what();
-                nr.reset();
+                clearNr();
                 fg.reset();
                 optical.reset();
             }
-        }
-        if (nr)
-        {
-            reduced = gpu->texture(extent.width, extent.height);
-            edited = gpu->texture(extent.width, extent.height);
-            motion = gpu->texture(extent.width, extent.height, DXGI_FORMAT_R16G16_FLOAT);
-            depth = gpu->texture(extent.width, extent.height, DXGI_FORMAT_R32_FLOAT);
-            upInput = gpu->texture(c.width, c.height);
-            upOutput = gpu->texture(c.width, c.height);
-            composite = gpu->texture(c.width, c.height);
         }
         if (fg)
         {
@@ -918,7 +952,7 @@ struct Worker
                 exportHandle(s.input.resource.Get()), exportHandle(s.real.resource.Get()),
                 exportHandle(s.generated.resource.Get()), exportHandle(s.fence.Get())};
         }
-        reply.activeFlags = (nr ? Neural : 0) | (fg ? FrameGeneration : 0) | (c.flags & BridgeTest);
+        reply.activeFlags = (hasNr() ? Neural : 0) | (fg ? FrameGeneration : 0) | (c.flags & BridgeTest);
         std::string message = "GPU bridge ready";
         if (!nrError.empty())
             message += "; NR: " + nrError;
@@ -961,7 +995,7 @@ struct Worker
     Reply process(const Command &c)
     {
         if (c.width != config.width || c.height != config.height || c.revision != config.revision ||
-            (c.flags & ~(Reset | Fsr)) != (config.flags & ~(Reset | Fsr)))
+            (c.flags & ~(Reset | Fsr)) != (config.flags & ~(Reset | Fsr)) || !sameNrResources(c, config))
             throw std::runtime_error("Stale frame/configuration revision");
         if (c.frameId <= lastFrame)
             throw std::runtime_error("Frame already processed or out of order");
@@ -1013,65 +1047,97 @@ struct Worker
         }
         QueryPerformanceCounter(&flowEnd);
         gpu->begin();
-        for (unsigned k = 0; k < 6; ++k)
+        for (unsigned k = 0; k < MaxNrPasses * 4 + 2; ++k)
             gpu->mark(k);
         Texture *processed = &s.input;
         uint32_t active = c.flags & BridgeTest;
-        if (nr)
+        if (hasNr())
         {
-            gpu->run("scaleMain", &s.input, reduced);
-            gpu->run("motionMain", nullptr, motion, nullptr, nullptr, &optical->vectors, 0,
-                     float(reduced.width) / c.width, float(reduced.height) / c.height);
-            gpu->run("zeroMain", nullptr, depth);
-            gpu->transition(reduced, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            gpu->transition(motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            gpu->transition(depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            gpu->transition(edited, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            nr->resource("DLSSNR.Color", reduced);
-            nr->resource("DLSSNR.Output", edited);
-            nr->resource("DLSSNR.MVec", motion);
-            nr->resource("DLSSNR.Depth", depth);
-            auto &p = nr->parameters;
-            p.Set("DLSSNR.Enabled", 1);
-            p.Set("DLSSNR.Reset", reset ? 1 : 0);
-            p.Set("DLSSNR.MVecScaleX", 1.0f);
-            p.Set("DLSSNR.MVecScaleY", 1.0f);
-            p.Set("DLSSNR.DepthInverted", 1);
-            p.Set("DLSSNR.Intensity", 1.0f);
-            p.Set("DLSSNR.Style", 0);
-            p.Set("DLSSNR.LocalToneStrength", 1.0f);
-            p.Set("DLSSNR.LocalStructureStrength", 1.0f);
-            if (!history)
-                std::fprintf(stderr, "[RTX][NR] first EvaluateFeature begin\n");
-            gpu->mark(0);
-            nr->eval(*gpu);
-            gpu->mark(1);
-            gpu->mark(2);
-            if (!history)
-                std::fprintf(stderr, "[RTX][NR] EvaluateFeature returned\n");
-            active |= Neural;
-            const bool upscale = reduced.width < c.width || reduced.height < c.height;
-            const bool fsr = upscale && (c.flags & Fsr);
-            const char *scaler = fsr ? "easuMain" : "scaleMain";
-            if (upscale)
+            bool upstreamChanged = false;
+            for (unsigned pass = 0; pass < c.nrPassCount; ++pass)
             {
-                gpu->run(scaler, &reduced, upInput);
-                gpu->run(scaler, &edited, upOutput);
-                gpu->run("residualMain", &s.input, composite, &upOutput, &upInput);
-                processed = &composite;
-                if (fsr)
-                    active |= Fsr;
-            }
-            else
-                processed = &edited;
-            if (fsr && c.sharpness)
-            {
-                gpu->run("rcasMain", processed, upOutput, nullptr, nullptr, nullptr,
-                         c.sharpness / 100.0f);
-                processed = &upOutput;
+                auto &stage = nrStages[pass];
+                auto &nr = stage.feature;
+                auto &reduced = stage.reduced; auto &edited = stage.edited;
+                auto &motion = stage.motion; auto &depth = stage.depth;
+                auto &upInput = stage.upInput; auto &upOutput = stage.upOutput;
+                auto &composite = stage.composite;
+                const auto settings = passConfig(c, pass);
+                Texture *passInput = processed;
+                gpu->run("scaleMain", passInput, reduced);
+                gpu->run("motionMain", nullptr, motion, nullptr, nullptr, &optical->vectors, 0,
+                         float(reduced.width) / c.width, float(reduced.height) / c.height);
+                gpu->run("zeroMain", nullptr, depth);
+                gpu->transition(reduced, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                gpu->transition(motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                gpu->transition(depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                gpu->transition(edited, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                nr->resource("DLSSNR.Color", reduced);
+                nr->resource("DLSSNR.Output", edited);
+                nr->resource("DLSSNR.MVec", motion);
+                nr->resource("DLSSNR.Depth", depth);
+                auto &p = nr->parameters;
+                const bool settingsChanged = !stage.settingsApplied || !(stage.appliedSettings == settings);
+                const bool tuningChanged = !stage.settingsApplied || !(stage.appliedSettings.tuning == settings.tuning);
+                const bool resetPass = reset || upstreamChanged || settingsChanged;
+                p.Set("DLSSNR.Reset", resetPass ? 1u : 0u);
+                if (tuningChanged)
+                {
+                    p.Set("DLSSNR.Enabled", 1u);
+                    p.Set("DLSSNR.MVecScaleX", 1.0f);
+                    p.Set("DLSSNR.MVecScaleY", 1.0f);
+                    p.Set("DLSSNR.DepthInverted", 1u);
+                    p.Set("DLSSNR.Intensity", settings.tuning.intensity);
+                    p.Set("DLSSNR.Style", settings.tuning.style);
+                    p.Set("DLSSNR.LocalToneStrength", settings.tuning.localTone);
+                    p.Set("DLSSNR.LocalStructureStrength", settings.tuning.localStructure);
+                    p.Set("DLSSNR.SkinStructureStrength", settings.tuning.skinStructure);
+                    p.Set("DLSSNR.UseAutoMask", settings.tuning.autoMask);
+                }
+                if (settingsChanged)
+                    std::fprintf(stderr, "[RTX][NR][Pass%u] controls preset=%u local_structure=%.2f local_tone=%.2f skin_structure=%.2f automatic_mask=%u fsr=%u sharpness=%u intensity=%.2f; reset_history=true\n",
+                        pass + 1, settings.tuning.style, settings.tuning.localStructure, settings.tuning.localTone,
+                        settings.tuning.skinStructure, settings.tuning.autoMask, settings.fsr, settings.sharpness, settings.tuning.intensity);
+                if (upstreamChanged && !settingsChanged && !reset)
+                    std::fprintf(stderr, "[RTX][NR][Pass%u] reset_history=true reason=upstream_settings_changed\n", pass + 1);
+                upstreamChanged |= settingsChanged;
+                stage.appliedSettings = settings;
+                stage.settingsApplied = true;
+                if (!history)
+                    std::fprintf(stderr, "[RTX][NR][Pass%u] first EvaluateFeature begin\n", pass + 1);
+                gpu->mark(pass * 4);
+                try { nr->eval(*gpu); }
+                catch (const std::exception &error) {
+                    throw std::runtime_error("NR pass " + std::to_string(pass + 1) + " evaluation failed: " + error.what());
+                }
+                if (!history)
+                    std::fprintf(stderr, "[RTX][NR][Pass%u] EvaluateFeature returned\n", pass + 1);
+                gpu->mark(pass * 4 + 1);
+                gpu->mark(pass * 4 + 2);
+                active |= Neural;
+                const bool upscale = reduced.width < c.width || reduced.height < c.height;
+                const bool fsr = upscale && settings.fsr;
+                const char *scaler = fsr ? "easuMain" : "scaleMain";
+                if (upscale)
+                {
+                    gpu->run(scaler, &reduced, upInput);
+                    gpu->run(scaler, &edited, upOutput);
+                    gpu->run("residualMain", passInput, composite, &upOutput, &upInput);
+                    processed = &composite;
+                    if (fsr)
+                        active |= Fsr;
+                }
+                else
+                    processed = &edited;
+                if (fsr && settings.sharpness)
+                {
+                    gpu->run("rcasMain", processed, upOutput, nullptr, nullptr, nullptr,
+                             settings.sharpness / 100.0f);
+                    processed = &upOutput;
+                }
+                gpu->mark(pass * 4 + 3);
             }
         }
-        gpu->mark(3);
         gpu->copy(*processed, s.real);
         if (fg)
         {
@@ -1133,9 +1199,9 @@ struct Worker
             p.Set("DLSSG.FenceEvent", gpu->event.h);
             if (!history)
                 std::fprintf(stderr, "[RTX][FG] first EvaluateFeature begin\n");
-            gpu->mark(4);
+            gpu->mark(MaxNrPasses * 4);
             fg->eval(*gpu);
-            gpu->mark(5);
+            gpu->mark(MaxNrPasses * 4 + 1);
             if (!history)
                 std::fprintf(stderr, "[RTX][FG] EvaluateFeature returned\n");
         }
@@ -1204,13 +1270,19 @@ struct Worker
         r.height = nrExtent(c.width, c.height, c.percent).height;
         r.flowTimeUs = static_cast<uint64_t>((flowEnd.QuadPart - flowBegin.QuadPart) * 1000000 /
                                              freq.QuadPart);
-        r.nrGpuUs = stageTimes[0];
-        r.reconstructionGpuUs = stageTimes[1];
-        r.fgGpuUs = stageTimes[2];
+        for (unsigned pass = 0; hasNr() && pass < c.nrPassCount; ++pass) {
+            r.nrGpuUs += stageTimes[pass * 2];
+            r.reconstructionGpuUs += stageTimes[pass * 2 + 1];
+            if (reset || c.frameId % 120 == 0)
+                std::fprintf(stderr, "[RTX][NR][Pass%u] nr_us=%llu reconstruction_us=%llu\n", pass + 1,
+                    static_cast<unsigned long long>(stageTimes[pass * 2]),
+                    static_cast<unsigned long long>(stageTimes[pass * 2 + 1]));
+        }
+        r.fgGpuUs = stageTimes[MaxNrPasses * 2];
         r.vramBytes = gpu->vram();
         r.workerTimeUs =
             static_cast<uint64_t>((end.QuadPart - begin.QuadPart) * 1000000 / freq.QuadPart);
-        std::string msg = nr ? "NR active" : "NR off";
+        std::string msg = hasNr() ? "NR active (" + std::to_string(c.nrPassCount) + (c.nrPassCount == 1 ? " pass)" : " passes)") : "NR off";
         if (!nrError.empty())
             msg = "NR unavailable: " + nrError;
         msg += active & Fsr ? "; FSR active" : "; FSR off";

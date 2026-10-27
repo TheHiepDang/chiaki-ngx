@@ -2,6 +2,7 @@
 
 #include "settings.h"
 #include <QTimer>
+#include <array>
 
 class QmlSettings : public QObject
 {
@@ -10,11 +11,21 @@ class QmlSettings : public QObject
     Q_PROPERTY(int eyeCandyDarkArea READ eyeCandyDarkArea WRITE setEyeCandyDarkArea NOTIFY eyeCandyChanged)
     Q_PROPERTY(QString rendererShortcut READ rendererShortcut NOTIFY rendererShortcutChanged)
     Q_PROPERTY(QString screenshotShortcut READ screenshotShortcut NOTIFY screenshotShortcutChanged)
+    Q_PROPERTY(bool enhancementCustomizePasses READ enhancementCustomizePasses WRITE setEnhancementCustomizePasses NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementNrPreset READ enhancementNrPreset WRITE setEnhancementNrPreset NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(float enhancementIntensity READ enhancementIntensity WRITE setEnhancementIntensity NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(float enhancementLocalStructure READ enhancementLocalStructure WRITE setEnhancementLocalStructure NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(float enhancementLocalTone READ enhancementLocalTone WRITE setEnhancementLocalTone NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(float enhancementSkinStructure READ enhancementSkinStructure WRITE setEnhancementSkinStructure NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(bool enhancementAutomaticMask READ enhancementAutomaticMask WRITE setEnhancementAutomaticMask NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(int enhancementPassCount READ enhancementPassCount WRITE setEnhancementPassCount NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementEditingPass READ enhancementEditingPass WRITE setEnhancementEditingPass NOTIFY enhancementPassSelectionChanged)
+    Q_PROPERTY(bool enhancementResolutionPending READ enhancementResolutionPending NOTIFY enhancementPercentPreviewChanged)
     Q_PROPERTY(bool enhancementNeural READ enhancementNeural WRITE setEnhancementNeural NOTIFY enhancementChanged)
-    Q_PROPERTY(int enhancementPercent READ enhancementPercent WRITE setEnhancementPercent NOTIFY enhancementChanged)
+    Q_PROPERTY(int enhancementPercent READ enhancementPercent WRITE setEnhancementPercent NOTIFY enhancementControlsChanged)
     Q_PROPERTY(int enhancementPercentPreview READ enhancementPercentPreview NOTIFY enhancementPercentPreviewChanged)
-    Q_PROPERTY(bool enhancementFsr READ enhancementFsr WRITE setEnhancementFsr NOTIFY enhancementChanged)
-    Q_PROPERTY(int enhancementSharpness READ enhancementSharpness WRITE setEnhancementSharpness NOTIFY enhancementChanged)
+    Q_PROPERTY(bool enhancementFsr READ enhancementFsr WRITE setEnhancementFsr NOTIFY enhancementControlsChanged)
+    Q_PROPERTY(int enhancementSharpness READ enhancementSharpness WRITE setEnhancementSharpness NOTIFY enhancementControlsChanged)
     Q_PROPERTY(bool enhancementFrameGeneration READ enhancementFrameGeneration WRITE setEnhancementFrameGeneration NOTIFY enhancementChanged)
     Q_PROPERTY(bool remotePlayAsk READ remotePlayAsk WRITE setRemotePlayAsk NOTIFY remotePlayAskChanged)
     Q_PROPERTY(bool addSteamShortcutAsk READ addSteamShortcutAsk WRITE setAddSteamShortcutAsk NOTIFY addSteamShortcutAskChanged)
@@ -174,6 +185,25 @@ class QmlSettings : public QObject
     Q_PROPERTY(float placeboToneMappingContrastSmoothness READ placeboToneMappingContrastSmoothness WRITE setPlaceboToneMappingContrastSmoothness NOTIFY placeboToneMappingContrastSmoothnessChanged)
 
 public:
+    bool enhancementCustomizePasses() const;
+    void setEnhancementCustomizePasses(bool value);
+    int enhancementNrPreset() const;
+    void setEnhancementNrPreset(int value);
+    float enhancementIntensity() const;
+    void setEnhancementIntensity(float value);
+    float enhancementLocalStructure() const;
+    void setEnhancementLocalStructure(float value);
+    float enhancementLocalTone() const;
+    void setEnhancementLocalTone(float value);
+    float enhancementSkinStructure() const;
+    void setEnhancementSkinStructure(float value);
+    bool enhancementAutomaticMask() const;
+    void setEnhancementAutomaticMask(bool value);
+    int enhancementPassCount() const;
+    void setEnhancementPassCount(int value);
+    int enhancementEditingPass() const;
+    void setEnhancementEditingPass(int value);
+    bool enhancementResolutionPending() const;
     bool enhancementNeural() const;
     int eyeCandyExposure() const;
     void setEyeCandyExposure(int value);
@@ -646,6 +676,8 @@ public:
 
 signals:
     void enhancementChanged();
+    void enhancementControlsChanged();
+    void enhancementPassSelectionChanged();
     void eyeCandyChanged();
     void enhancementPercentPreviewChanged();
     void rendererShortcutChanged();
@@ -809,7 +841,10 @@ private:
     QTimer enhancement_percent_timer;
     QTimer diagnostic_settings_timer;
     void logDiagnosticSettings();
-    int enhancement_percent_preview = -1;
+    void setEnhancementTuning(const chiaki_enhancement::NrTuning &value);
+    int enhancement_editing_pass = 0;
+    std::array<int, 3> enhancement_percent_previews{{-1, -1, -1}};
+    void commitEnhancementPercents();
     Settings *settings = {};
     QStringList audio_in_devices;
     QStringList audio_out_devices;

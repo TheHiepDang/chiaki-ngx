@@ -538,10 +538,22 @@ struct EnhancementPipeline::Impl
         config.revision = ++revision;
         config.percent = unsigned(options.percent);
         config.sharpness = unsigned(options.sharpness);
+        config.nrPassCount = options.nrPassCount;
+        config.nrTuning = options.nrTuning;
+        std::copy(options.additionalPasses.begin(), options.additionalPasses.end(), config.additionalPasses);
         config.flags = (options.neural ? Neural : 0) |
                        (options.frameGeneration ? FrameGeneration : 0) |
                        ((options.neural && options.fsr && canUpscale(native, work)) ? Fsr : 0) |
                        (options.bridgeTest ? BridgeTest : 0);
+        qInfo() << "[RTX][NR] configured_passes=" << config.nrPassCount;
+        for (unsigned n = 0; n < config.nrPassCount; ++n) {
+            const auto p = passConfig(config, n);
+            qInfo().noquote() << QStringLiteral("[RTX][NR][Pass%1]").arg(n + 1)
+                << "percent=" << p.percent << "fsr=" << p.fsr << "sharpness=" << p.sharpness
+                << "preset=" << p.tuning.style << "local_structure=" << p.tuning.localStructure
+                << "local_tone=" << p.tuning.localTone << "skin_structure=" << p.tuning.skinStructure
+                << "automatic_mask=" << p.tuning.autoMask << "intensity=" << p.tuning.intensity;
+        }
         std::memcpy(&config.adapterLuid, id.deviceLUID, 8);
         process.setProgram(executable);
         process.setArguments({QStringLiteral("--runtime-dir"), runtime});
@@ -698,11 +710,16 @@ void EnhancementPipeline::prepare(pl_vulkan vk, Extent native, const Enhancement
     const bool sameResources = i.hdr == hdr && i.vk == vk && i.native.width == native.width &&
         i.native.height == native.height && i.options.neural == options.neural &&
         i.options.frameGeneration == options.frameGeneration && i.options.bridgeTest == options.bridgeTest &&
-        i.options.percent == options.percent;
+        (!options.neural || (i.options.percent == options.percent && i.options.nrPassCount == options.nrPassCount &&
+            (options.nrPassCount < 2 || i.options.additionalPasses[0].percent == options.additionalPasses[0].percent) &&
+            (options.nrPassCount < 3 || i.options.additionalPasses[1].percent == options.additionalPasses[1].percent)));
     if (sameResources) {
         i.options = options;
         i.config.flags = (i.config.flags & ~uint32_t(Fsr)) | ((options.neural && options.fsr && canUpscale(i.native, i.work)) ? Fsr : 0);
         i.config.sharpness = uint32_t(options.sharpness);
+        i.config.nrPassCount = options.nrPassCount;
+        i.config.nrTuning = options.nrTuning;
+        std::copy(options.additionalPasses.begin(), options.additionalPasses.end(), i.config.additionalPasses);
         return;
     }
     {

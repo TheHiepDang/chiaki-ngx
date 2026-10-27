@@ -14,17 +14,39 @@
 #include <QtTest/QTest>
 #include <QSignalSpy>
 
+class NrSettingsMap : public QQmlPropertyMap
+{
+    Q_OBJECT
+public:
+    NrSettingsMap() : QQmlPropertyMap(this, nullptr) {}
+    Q_INVOKABLE void queueEnhancementPercent(int value) {
+        insert("enhancementPercentPreview", value);
+        insert("enhancementResolutionPending", true);
+    }
+};
+
 class Backend : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QQmlPropertyMap *settings READ settings CONSTANT)
     Q_PROPERTY(QQmlPropertyMap *window READ window CONSTANT)
-    QQmlPropertyMap settingsMap, windowMap;
+    NrSettingsMap settingsMap;
+    QQmlPropertyMap windowMap;
 
   public:
     Backend()
     {
         settingsMap.insert("enhancementNeural", false);
+        settingsMap.insert("enhancementCustomizePasses", false);
+        settingsMap.insert("enhancementNrPreset", 0);
+        settingsMap.insert("enhancementIntensity", 1.0);
+        settingsMap.insert("enhancementLocalStructure", 1.0);
+        settingsMap.insert("enhancementLocalTone", 1.0);
+        settingsMap.insert("enhancementSkinStructure", -1.0);
+        settingsMap.insert("enhancementAutomaticMask", false);
+        settingsMap.insert("enhancementPassCount", 1);
+        settingsMap.insert("enhancementEditingPass", 0);
+        settingsMap.insert("enhancementResolutionPending", false);
         settingsMap.insert("eyeCandyExposure", 0);
         settingsMap.insert("eyeCandyDarkArea", 0);
         settingsMap.insert("showStreamStats", false);
@@ -87,6 +109,11 @@ int main(int argc, char **argv)
          sharp = root->findChild<QObject *>("sharpness"),
          fg = root->findChild<QObject *>("fgToggle"), scale = root->findChild<QObject *>("nrScale");
     CHECK(nr && fsr && sharp && fg && scale);
+    auto passCount = root->findChild<QObject *>("nrPassCount");
+    auto editingPass = root->findChild<QObject *>("nrEditingPass");
+    CHECK(passCount && editingPass);
+    CHECK(passCount->property("currentIndex").toInt() == 0);
+    CHECK(!editingPass->property("visible").toBool());
     auto stats = root->findChild<QObject *>("gameplayStatsToggle");
     CHECK(stats && !stats->property("checked").toBool());
     backend.settings()->insert("showStreamStats", true);
@@ -100,6 +127,87 @@ int main(int argc, char **argv)
     backend.settings()->insert("enhancementNeural", true);
     app.processEvents();
     CHECK(scale->property("enabled").toBool());
+    CHECK(passCount->property("enabled").toBool());
+    CHECK(QMetaObject::invokeMethod(passCount, "activated", Q_ARG(int, 2)));
+    CHECK(backend.settings()->value("enhancementPassCount").toInt() == 3);
+    app.processEvents();
+    CHECK(!editingPass->property("visible").toBool());
+    auto customize = root->findChild<QObject *>("nrCustomizePasses");
+    auto preset = root->findChild<QObject *>("nrPreset");
+    auto structure = root->findChild<QObject *>("nrLocalStructure");
+    auto tone = root->findChild<QObject *>("nrLocalTone");
+    auto skin = root->findChild<QObject *>("nrSkinStructure");
+    auto mask = root->findChild<QObject *>("nrAutomaticMask");
+    CHECK(customize && preset && structure && tone && skin && mask);
+    CHECK(customize->property("visible").toBool());
+    CHECK(customize->setProperty("checked", true));
+    CHECK(QMetaObject::invokeMethod(customize, "toggled"));
+    CHECK(backend.settings()->value("enhancementCustomizePasses").toBool());
+    app.processEvents();
+    CHECK(editingPass->property("visible").toBool());
+    CHECK(editingPass->property("count").toInt() == 3);
+    CHECK(preset->property("count").toInt() == 3);
+    CHECK(QMetaObject::invokeMethod(preset, "activated", Q_ARG(int, 2)));
+    CHECK(backend.settings()->value("enhancementNrPreset").toInt() == 2);
+    CHECK(backend.settings()->value("enhancementLocalTone").toDouble() == 1.0);
+    CHECK(!skin->property("enabled").toBool());
+    CHECK(mask->setProperty("checked", true));
+    CHECK(QMetaObject::invokeMethod(mask, "toggled"));
+    app.processEvents();
+    CHECK(skin->property("enabled").toBool());
+    CHECK(structure->setProperty("value", 0.75));
+    CHECK(QMetaObject::invokeMethod(structure, "moved"));
+    CHECK(backend.settings()->value("enhancementLocalStructure").toDouble() == 0.75);
+    CHECK(tone->setProperty("value", 0.5));
+    CHECK(QMetaObject::invokeMethod(tone, "moved"));
+    CHECK(backend.settings()->value("enhancementLocalTone").toDouble() == 0.5);
+    CHECK(skin->setProperty("value", 1.25));
+    CHECK(QMetaObject::invokeMethod(skin, "moved"));
+    CHECK(backend.settings()->value("enhancementSkinStructure").toDouble() == 1.25);
+    auto intensity = root->findChild<QObject *>("nrIntensity");
+    CHECK(intensity && intensity->property("from").toDouble() == 0 && intensity->property("to").toDouble() == 1);
+    intensity->setProperty("value", 0.45);
+    CHECK(QMetaObject::invokeMethod(intensity, "moved"));
+    CHECK(backend.settings()->value("enhancementIntensity").toDouble() == 0.45);
+    // A reset changes only its setting; resolution queues rather than committing.
+    backend.settings()->insert("enhancementPercent", 77);
+    backend.settings()->insert("enhancementPercentPreview", 77);
+    backend.settings()->insert("enhancementSharpness", 83);
+    const QStringList controls = {"Intensity", "LocalStructure", "LocalTone", "SkinStructure", "Sharpness", "Resolution"};
+    const QStringList properties = {"enhancementIntensity", "enhancementLocalStructure", "enhancementLocalTone", "enhancementSkinStructure", "enhancementSharpness", "enhancementPercentPreview"};
+    const QList<double> defaults = {1, 1, 1, -1, 20, 65};
+    backend.window()->insert("enhancementUpscalingEligible", true);
+    app.processEvents();
+    for (int n=0;n<controls.size();++n) {
+        auto reset = root->findChild<QObject *>(("resetNr" + controls[n]).toUtf8().constData());
+        CHECK(reset && reset->property("text").toString() == QString::fromUtf8("\xe2\x86\xba"));
+        CHECK(reset->property("enabled").toBool());
+        QList<QVariant> before;
+        for (const auto &property:properties) before.append(backend.settings()->value(property));
+        CHECK(QMetaObject::invokeMethod(reset, "clicked"));
+        CHECK(backend.settings()->value(properties[n]).toDouble() == defaults[n]);
+        for(int k=0;k<properties.size();++k) if(k!=n) CHECK(backend.settings()->value(properties[k])==before[k]);
+    }
+    CHECK(backend.settings()->value("enhancementPercent").toInt()==77);
+    CHECK(backend.settings()->value("enhancementResolutionPending").toBool());
+    backend.settings()->insert("enhancementPercent", 65);
+    backend.settings()->insert("enhancementResolutionPending", false);
+    backend.window()->insert("enhancementUpscalingEligible", false);
+    CHECK(QMetaObject::invokeMethod(editingPass, "activated", Q_ARG(int, 1)));
+    CHECK(backend.settings()->value("enhancementEditingPass").toInt() == 1);
+    backend.window()->insert("enhancementApplying", true);
+    app.processEvents();
+    CHECK(!passCount->property("enabled").toBool());
+    CHECK(!customize->property("enabled").toBool() && !preset->property("enabled").toBool());
+    CHECK(!intensity->property("enabled").toBool());
+    for (const auto &control:controls) CHECK(!root->findChild<QObject *>(("resetNr"+control).toUtf8().constData())->property("enabled").toBool());
+    CHECK(!structure->property("enabled").toBool() && !tone->property("enabled").toBool() && !skin->property("enabled").toBool());
+    CHECK(!editingPass->property("enabled").toBool());
+    backend.window()->insert("enhancementApplying", false);
+    backend.settings()->insert("enhancementPassCount", 1);
+    backend.settings()->insert("enhancementEditingPass", 0);
+    app.processEvents();
+    CHECK(!editingPass->property("visible").toBool());
     CHECK(!fsr->property("enabled").toBool());
     backend.window()->insert("enhancementUpscalingEligible", true);
     app.processEvents();
@@ -281,7 +389,8 @@ int main(int argc, char **argv)
     }
     tabs->setProperty("currentIndex", 1);
     QTest::qWait(30);
-    CHECK(item->height() > rendererHeight && item->height() < 1080);
+    CHECK(item->height() > 200 && item->height() < 1080);
+    CHECK(qAbs(item->height() - item->implicitHeight()) <= 1);
     CHECK(eyeView->property("contentHeight").toDouble() <= eyeView->height() + 1);
     window.resize(540, 250);
     wrapperItem->setHeight(250);
@@ -350,7 +459,49 @@ int main(int argc, char **argv)
             loop.exec();
             return window.grabWindow().save(previewRoot + "/" + name + ".png");
         };
+        backend.settings()->insert("enhancementCustomizePasses", false);
+        backend.settings()->insert("enhancementPassCount", 3);
+        backend.window()->insert("enhancementUpscalingEligible", true);
         CHECK(capture("renderer"));
+        backend.settings()->insert("enhancementCustomizePasses", true);
+        backend.settings()->insert("enhancementPassCount", 3);
+        backend.settings()->insert("enhancementEditingPass", 1);
+        app.processEvents();
+        auto intensityReset = live->findChild<QQuickItem *>("resetNrIntensity");
+        CHECK(intensityReset);
+        backend.settings()->insert("enhancementIntensity", 0.3);
+        intensityReset->forceActiveFocus(Qt::TabFocusReason);
+        QTest::keyClick(&window, Qt::Key_Return);
+        app.processEvents();
+        CHECK(backend.settings()->value("enhancementIntensity").toDouble()==1);
+        rendererTab->forceActiveFocus(Qt::TabFocusReason);
+        CHECK(capture("renderer-three-passes"));
+        window.resize(540, 720); wrapperItem->setHeight(720);
+        CHECK(capture("renderer-three-passes-720"));
+        CHECK(item->height() <= 720);
+        auto sharpReset = live->findChild<QQuickItem *>("resetNrSharpness");
+        CHECK(sharpReset);
+        sharpReset->forceActiveFocus(Qt::TabFocusReason);
+        QTest::qWait(30);
+        const auto resetPosition = sharpReset->mapToItem(item, QPointF(0, 0));
+        CHECK(resetPosition.y() >= 0 && resetPosition.y() + sharpReset->height() <= item->height() + 1);
+        auto liveFsr = live->findChild<QQuickItem *>("fsrToggle");
+        CHECK(liveFsr);
+        const auto fsrPosition = liveFsr->mapToItem(item, QPointF(0, 0));
+        CHECK(fsrPosition.x() >= 0 && fsrPosition.x() + liveFsr->width() <= item->width() + 1);
+        window.resize(540, 1080); wrapperItem->setHeight(1080);
+        app.processEvents();
+        auto livePassSelector = live->findChild<QQuickItem *>("nrEditingPass");
+        CHECK(livePassSelector && livePassSelector->isVisible());
+        livePassSelector->forceActiveFocus(Qt::TabFocusReason);
+        QTest::keyClick(&window, Qt::Key_Return);
+        app.processEvents();
+        CHECK(livePassSelector->property("popup").value<QObject *>()->property("visible").toBool());
+        QTest::keyClick(&window, Qt::Key_Down);
+        QTest::keyClick(&window, Qt::Key_Return);
+        app.processEvents();
+        CHECK(backend.settings()->value("enhancementEditingPass").toInt() == 2);
+        rendererTab->forceActiveFocus(Qt::TabFocusReason);
         QTest::keyClick(&window, Qt::Key_PageDown);
         CHECK(capture("eye-candy"));
         backend.window()->insert("enhancementApplying", true);

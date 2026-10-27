@@ -81,6 +81,8 @@ if (!$headerNotice) { throw 'Missing NVIDIA Optical Flow header notice.' }
 $readme = [IO.File]::ReadAllText((Join-Path $repoRoot 'README.md'))
 $readme = $readme.Replace('gui/res/chiaking-logo.svg', 'README-logo.svg').Replace(
     '](docs/diy/runtime-packaging.md)', '](https://github.com/TheHiepDang/chiaki-ngx/blob/main/docs/diy/runtime-packaging.md)')
+$readme = $readme.Replace('](docs/diy/enhancements.md#bug-reports)',
+    '](https://github.com/TheHiepDang/chiaki-ngx/blob/main/docs/diy/enhancements.md#bug-reports)')
 [IO.File]::WriteAllText((Join-Path $destinationRoot 'README.md'), $readme, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Join-Path $repoRoot 'gui/res/chiaking-logo.svg') -Destination (Join-Path $destinationRoot 'README-logo.svg') -Force
 # Keep source identity fields used by application diagnostics, without carrying

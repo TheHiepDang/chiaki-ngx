@@ -16,7 +16,10 @@ $next = Join-Path $workRoot 'next'
 $previous = Join-Path $workRoot 'previous'
 $logRoot = Join-Path $workRoot 'logs'
 if (!$InputDirectory) { $InputDirectory = $destination }
-if (!$GuiBuildDirectory) { $GuiBuildDirectory = Join-Path $repoRoot 'build-rc-gui' }
+if (!$GuiBuildDirectory) {
+    $clangBuild = Join-Path $repoRoot 'build-clang-gui'
+    $GuiBuildDirectory = if (Test-Path -LiteralPath (Join-Path $clangBuild 'CMakeCache.txt')) { $clangBuild } else { Join-Path $repoRoot 'build-rc-gui' }
+}
 if (!$WorkerBuildDirectory) { $WorkerBuildDirectory = Join-Path $repoRoot 'build-rc-worker' }
 $inputRoot = (Resolve-Path -LiteralPath $InputDirectory).Path
 $guiBuild = (Resolve-Path -LiteralPath $GuiBuildDirectory).Path
@@ -137,6 +140,8 @@ try {
         $readme = [IO.File]::ReadAllText($readmePath)
         $readme = $readme.Replace('3. For optional experimental **Neural Rendering**, supply your own compatible **`nvngx_dlssnr.dll`** in **`runtimes/`** beside `chiaki.exe`.',
             '3. This **local test build** already includes the compatible Neural Rendering runtime in **`runtimes/`**.')
+        $readme = [regex]::Replace($readme, '(?im)^\d+\. .*supply your own.*nvngx_dlssnr\.dll.*$',
+            '2. This **local test build** already includes the compatible NR runtime in **`runtimes/`**.')
         [IO.File]::WriteAllText($readmePath, $readme, [Text.UTF8Encoding]::new($false))
         '[RTX][Build] Matching NR runtime included for local testing.' | Tee-Object -FilePath (Join-Path $logRoot 'runtime.log')
     }

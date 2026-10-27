@@ -154,3 +154,6 @@ chiaki_worker_*-crash.txt
 **/nvngx_dlssnr.dll
 **/dlssnr.dll
 *.bak.*
+
+# AI
+AGENTS.md

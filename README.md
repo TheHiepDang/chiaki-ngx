@@ -15,10 +15,20 @@ Check [NVIDIA’s DLSS SDK](https://github.com/NVIDIA/DLSS) or [TechPowerUp](htt
 
 RTX 40/50 use native FG. RTX 20/30 use the bundled unofficial SM86 route.
 
+## NR passes
+
+During streaming, open **RTX settings** with **Ctrl+Shift+F**. Enable Neural Rendering and choose **1, 2 or 3 passes**. Extra passes follow pass 1 by default. Check **Customize each pass**, then **Configure pass**, to edit them independently; saved custom values are kept when you switch back.
+
+Each pass offers **Default / Natural / Cinematic** NR presets, **Intensity**, **Local Structure**, **Local Tone**, **Skin Structure**, **Automatic Mask**, resolution, FSR and sharpness. Presets select the NR model without moving your strength sliders. Skin Structure requires Automatic Mask; **−1 / Off** disables skin adjustments. Use **↺** beside a slider to restore its default for the selected pass. Resolution, including its reset, applies three seconds after the last adjustment. Frame generation runs after the final pass. More passes use more GPU time and memory; one pass remains the default.
+
 ## Showcase
 
 [![Watch the video](https://img.youtube.com/vi/tHVEoDi1oKc/hqdefault.jpg)](https://www.youtube.com/watch?v=tHVEoDi1oKc)
 
+
+## Bug reports
+
+Open **Settings → General → Log Directory → Open**. Include the matching **`chiaki_ngx_*.log`** and **`.previous.log`** if present, plus **`chiaki_session_*.log`** for streaming issues. Include crash text if created; share crash dumps privately. NR pass diagnostics use **`[RTX][NR][Pass1]`**, **`[RTX][NR][Pass2]`** and **`[RTX][NR][Pass3]`**. See [reporting details](docs/diy/enhancements.md#bug-reports) for SM86 logs and other information to attach.
 
 ## Credits
 

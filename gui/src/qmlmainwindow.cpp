@@ -6972,7 +6972,13 @@ void QmlMainWindow::render()
                         ? tr("Native %1×%2 · NR %3×%4 (%5% requested)")
                             .arg(nw).arg(nh).arg(rw).arg(rh).arg(settings->GetEnhancementPercent())
                         : tr("Video dimensions available during streaming");
-                    enhancement_upscaling_eligible = rw > 0 && rh > 0 && (rw < nw || rh < nh);
+                    enhancement_upscaling_eligible = false;
+                    if (nw > 0 && nh > 0 && rw > 0 && rh > 0) {
+                        for (int pass = 0; pass < settings->GetEnhancementPassCount(); ++pass) {
+                            const auto size = chiaki_enhancement::nrExtent(unsigned(nw), unsigned(nh), int(settings->GetEnhancementEffectivePassConfig(pass).percent));
+                            enhancement_upscaling_eligible |= size.width < unsigned(nw) || size.height < unsigned(nh);
+                        }
+                    }
                     enhancement_nr_active = nr; enhancement_fsr_active = fsr; enhancement_fg_active = fg;
                     emit enhancementStatusChanged();
                 }, Qt::QueuedConnection);
@@ -7993,6 +7999,10 @@ void QmlMainWindow::updateEnhancementSettings()
     options.percent = settings->GetEnhancementPercent();
     options.fsr = settings->GetEnhancementFsr();
     options.sharpness = settings->GetEnhancementSharpness();
+    options.nrPassCount = unsigned(settings->GetEnhancementPassCount());
+    options.nrTuning = settings->GetEnhancementPassTuning(0);
+    for (unsigned pass = 1; pass < options.nrPassCount; ++pass)
+        options.additionalPasses[pass - 1] = settings->GetEnhancementEffectivePassConfig(int(pass));
     options.frameGeneration = settings->GetEnhancementFrameGeneration();
     QMetaObject::invokeMethod(quick_render, [this, options]() {
         enhancement_options = options;

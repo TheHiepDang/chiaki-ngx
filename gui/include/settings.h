@@ -6,6 +6,7 @@
 #include <chiaki/session.h>
 
 #include "host.h"
+#include "../enhancement/protocol.h"
 
 #include <QSettings>
 #include <QList>
@@ -369,6 +370,81 @@ class Settings : public QObject
         void SetEnhancementFsr(bool value) { settings.setValue("enhancement/fsr", value); }
         int GetEnhancementSharpness() const { return qBound(0, settings.value("enhancement/sharpness", 20).toInt(), 100); }
         void SetEnhancementSharpness(int value) { settings.setValue("enhancement/sharpness", qBound(0, value, 100)); }
+        int GetEnhancementPassCount() const { return qBound(1, settings.value("enhancement/nr_pass_count", 1).toInt(), 3); }
+        void SetEnhancementPassCount(int value) { settings.setValue("enhancement/nr_pass_count", qBound(1, value, 3)); }
+        QString EnhancementPassKey(int pass, const char *key) const
+        { return QStringLiteral("enhancement/pass%1/%2").arg(qBound(0, pass, 2) + 1).arg(QString::fromLatin1(key)); }
+        int GetEnhancementPassPercent(int pass) const
+        { return pass <= 0 ? GetEnhancementPercent() : qBound(50, settings.value(EnhancementPassKey(pass, "percent"), 65).toInt(), 100); }
+        void SetEnhancementPassPercent(int pass, int value)
+        { if (pass <= 0) SetEnhancementPercent(value); else settings.setValue(EnhancementPassKey(pass, "percent"), qBound(50, value, 100)); }
+        bool GetEnhancementPassFsr(int pass) const
+        { return pass <= 0 ? GetEnhancementFsr() : settings.value(EnhancementPassKey(pass, "fsr"), true).toBool(); }
+        void SetEnhancementPassFsr(int pass, bool value)
+        { if (pass <= 0) SetEnhancementFsr(value); else settings.setValue(EnhancementPassKey(pass, "fsr"), value); }
+        int GetEnhancementPassSharpness(int pass) const
+        { return pass <= 0 ? GetEnhancementSharpness() : qBound(0, settings.value(EnhancementPassKey(pass, "sharpness"), 20).toInt(), 100); }
+        void SetEnhancementPassSharpness(int pass, int value)
+        { if (pass <= 0) SetEnhancementSharpness(value); else settings.setValue(EnhancementPassKey(pass, "sharpness"), qBound(0, value, 100)); }
+        bool GetEnhancementCustomizePasses() const { return settings.value("enhancement/customize_passes", false).toBool(); }
+        QString EnhancementTuningKey(int pass, const char *key) const
+        { return pass <= 0 ? QStringLiteral("enhancement/%1").arg(QString::fromLatin1(key)) : EnhancementPassKey(pass, key); }
+        float EnhancementStrength(int pass, const char *key, float low, float high, float fallback) const
+        {
+            bool okay = false;
+            const double value = settings.value(EnhancementTuningKey(pass, key), fallback).toDouble(&okay);
+            return okay && std::isfinite(value) ? float(qBound(double(low), value, double(high))) : fallback;
+        }
+        chiaki_enhancement::NrTuning GetEnhancementPassTuning(int pass) const
+        {
+            chiaki_enhancement::NrTuning result;
+            result.intensity = EnhancementStrength(pass, "intensity", 0, 1, 1);
+            result.localStructure = EnhancementStrength(pass, "local_structure", 0, 2, 1);
+            result.localTone = EnhancementStrength(pass, "local_tone", 0, 2, 1);
+            result.skinStructure = EnhancementStrength(pass, "skin_structure", -1, 2.5f, -1);
+            result.style = unsigned(qBound(0, settings.value(EnhancementTuningKey(pass, "nr_style"), 0).toInt(), 2));
+            result.autoMask = settings.value(EnhancementTuningKey(pass, "auto_mask"), false).toBool() ? 1u : 0u;
+            return result;
+        }
+        void SetEnhancementPassTuning(int pass, const chiaki_enhancement::NrTuning &value)
+        {
+            if (!chiaki_enhancement::validTuning(value)) return;
+            settings.setValue(EnhancementTuningKey(pass, "intensity"), value.intensity);
+            settings.setValue(EnhancementTuningKey(pass, "local_structure"), value.localStructure);
+            settings.setValue(EnhancementTuningKey(pass, "local_tone"), value.localTone);
+            settings.setValue(EnhancementTuningKey(pass, "skin_structure"), value.skinStructure);
+            settings.setValue(EnhancementTuningKey(pass, "nr_style"), value.style);
+            settings.setValue(EnhancementTuningKey(pass, "auto_mask"), bool(value.autoMask));
+        }
+        chiaki_enhancement::NrPassConfig GetEnhancementPassConfig(int pass) const
+        {
+            chiaki_enhancement::NrPassConfig result;
+            result.percent = unsigned(GetEnhancementPassPercent(pass));
+            result.sharpness = unsigned(GetEnhancementPassSharpness(pass));
+            result.fsr = GetEnhancementPassFsr(pass) ? 1u : 0u;
+            result.tuning = GetEnhancementPassTuning(pass);
+            return result;
+        }
+        chiaki_enhancement::NrPassConfig GetEnhancementEffectivePassConfig(int pass) const
+        { return GetEnhancementPassConfig(pass > 0 && !GetEnhancementCustomizePasses() ? 0 : pass); }
+        void SetEnhancementCustomizePasses(bool value)
+        {
+            if (value && !GetEnhancementCustomizePasses()) {
+                // Seed only missing custom values. Re-enabling preserves every saved edit.
+                const auto first = GetEnhancementPassConfig(0);
+                const QMap<QString, QVariant> defaults = {
+                    {"percent", first.percent}, {"fsr", bool(first.fsr)}, {"sharpness", first.sharpness},
+                    {"intensity", first.tuning.intensity}, {"local_structure", first.tuning.localStructure}, {"local_tone", first.tuning.localTone},
+                    {"skin_structure", first.tuning.skinStructure}, {"nr_style", first.tuning.style},
+                    {"auto_mask", bool(first.tuning.autoMask)}};
+                for (int pass = 1; pass < 3; ++pass)
+                    for (auto it = defaults.cbegin(); it != defaults.cend(); ++it) {
+                        const QString key = EnhancementPassKey(pass, it.key().toLatin1().constData());
+                        if (!settings.contains(key)) settings.setValue(key, it.value());
+                    }
+            }
+            settings.setValue("enhancement/customize_passes", value);
+        }
         bool GetEnhancementFrameGeneration() const { return settings.value("enhancement/frame_generation", false).toBool(); }
         void SetEnhancementFrameGeneration(bool value) { settings.setValue("enhancement/frame_generation", value); }
         int GetEyeCandyExposure() const { return qBound(-100, settings.value("eye_candy/exposure", 0).toInt(), 100); }

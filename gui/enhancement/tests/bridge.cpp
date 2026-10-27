@@ -112,10 +112,34 @@ int main(int argc, char **argv)
             }
             return fallback;
         };
+        const auto tuningArgument = [&](const QString &name, float fallback) {
+            const int at = app.arguments().indexOf(name);
+            bool okay = false;
+            const float value = at >= 0 && at + 1 < app.arguments().size() ? app.arguments()[at + 1].toFloat(&okay) : fallback;
+            return okay && std::isfinite(value) ? value : fallback;
+        };
+        const auto tuningFor = [&](const QString &prefix, chiaki_enhancement::NrTuning fallback) {
+            fallback.intensity = tuningArgument(prefix + "intensity", fallback.intensity);
+            fallback.style = unsigned(tuningArgument(prefix + "style", float(fallback.style)));
+            fallback.localStructure = tuningArgument(prefix + "structure", fallback.localStructure);
+            fallback.localTone = tuningArgument(prefix + "tone", fallback.localTone);
+            fallback.skinStructure = tuningArgument(prefix + "skin", fallback.skinStructure);
+            fallback.autoMask = app.arguments().contains(prefix + "mask") ? 1u : fallback.autoMask;
+            return fallback;
+        };
+        options.nrTuning = tuningFor("--nr-", options.nrTuning);
         const int sourceFps = argument("--source-fps", 0);
         QElapsedTimer measuredCadence;
         options.percent = argument("--percent", 65);
         options.sharpness = argument("--sharpness", 0);
+        options.nrPassCount = qBound(1, argument("--passes", 1), 3);
+        for (unsigned n = 1; n < options.nrPassCount; ++n) {
+            auto &p = options.additionalPasses[n - 1];
+            p.tuning = tuningFor(QStringLiteral("--pass%1-").arg(n + 1), options.nrTuning);
+            p.percent = argument(QStringLiteral("--pass%1-percent").arg(n + 1), options.percent);
+            p.sharpness = argument(QStringLiteral("--pass%1-sharpness").arg(n + 1), options.sharpness);
+            p.fsr = app.arguments().contains(QStringLiteral("--pass%1-no-fsr").arg(n + 1)) ? 0u : unsigned(options.fsr);
+        }
         int width = argument("--width", 640), height = argument("--height", 360);
         const int soak = argument("--soak-seconds", 0),
                   targetFrames = soak ? std::numeric_limits<int>::max() : argument("--frames", 30);
@@ -231,9 +255,28 @@ int main(int argc, char **argv)
                     return;
                 }
                 processing = pipeline.submitFrame();
+                if (processing && app.arguments().contains("--hot-nr-controls") && (id % 5) == 0) {
+                    options.nrTuning.intensity = options.nrTuning.intensity == 0.25f ? 0.75f : 0.25f;
+                    options.nrTuning.style = (options.nrTuning.style + 1) % 3;
+                    options.nrTuning.localTone = options.nrTuning.localTone == 0.25f ? 1.25f : 0.25f;
+                    options.nrTuning.autoMask = options.nrTuning.autoMask ? 0u : 1u;
+                    for (unsigned pass = 1; !app.arguments().contains("--hot-first-pass-only") && pass < options.nrPassCount; ++pass) {
+                        auto &tuning = options.additionalPasses[pass - 1].tuning;
+                        tuning.style = (tuning.style + 1) % 3;
+                        tuning.localStructure = tuning.localStructure == 0.5f ? 1.5f : 0.5f;
+                        tuning.skinStructure = tuning.skinStructure == -1.0f ? 1.5f : -1.0f;
+                        tuning.autoMask = 1;
+                    }
+                    pipeline.prepare(vk, {uint32_t(width), uint32_t(height)}, options, false);
+                }
                 if (processing && app.arguments().contains("--toggle-fsr-inflight") && (id % 5) == 0) {
                     options.fsr = !options.fsr;
                     options.sharpness = options.fsr ? 20 : 0;
+                    for (unsigned pass = 1; pass < options.nrPassCount; ++pass) {
+                        auto &settings = options.additionalPasses[pass - 1];
+                        settings.fsr = settings.fsr ? 0u : 1u;
+                        settings.sharpness = settings.fsr ? 35u : 0u;
+                    }
                     pipeline.prepare(vk, {uint32_t(width), uint32_t(height)}, options, false);
                 }
             });
@@ -356,7 +399,9 @@ int main(int argc, char **argv)
                         app.quit();
                         return;
                     }
-                    if (options.neural && !changedNrPixels)
+                    bool nonzeroIntensity = options.nrTuning.intensity > 0;
+                    for (unsigned n=1;n<options.nrPassCount;++n) nonzeroIntensity |= options.additionalPasses[n-1].tuning.intensity > 0;
+                    if (options.neural && nonzeroIntensity && !changedNrPixels)
                     {
                         qCritical() << "NR output never changed pixels";
                         app.quit();

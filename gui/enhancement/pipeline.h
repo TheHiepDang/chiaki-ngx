@@ -3,6 +3,7 @@
 #include "protocol.h"
 #include <QObject>
 #include <memory>
+#include <array>
 extern "C"
 {
 #include <libplacebo/vulkan.h>
@@ -13,10 +14,14 @@ struct EnhancementOptions
 {
     bool neural = false, fsr = true, frameGeneration = false, bridgeTest = false;
     int percent = 65, sharpness = 20;
+    unsigned nrPassCount = 1;
+    chiaki_enhancement::NrTuning nrTuning;
+    std::array<chiaki_enhancement::NrPassConfig, chiaki_enhancement::MaxNrPasses - 1> additionalPasses{};
     bool operator==(const EnhancementOptions &o) const
     {
         return neural == o.neural && fsr == o.fsr && frameGeneration == o.frameGeneration &&
-               bridgeTest == o.bridgeTest && percent == o.percent && sharpness == o.sharpness;
+               bridgeTest == o.bridgeTest && percent == o.percent && sharpness == o.sharpness &&
+               nrPassCount == o.nrPassCount && nrTuning == o.nrTuning && additionalPasses == o.additionalPasses;
     }
 };
 
