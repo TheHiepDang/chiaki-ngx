@@ -174,15 +174,67 @@ to refresh the CLANG64 closure, then inspect its diff and run full validation. U
 source refs in build scripts/workflow together with the lock. Never refresh dependencies during
 an existing tag's build to work around a failure.
 
-## Recovery
+## Publisher protocol and recovery
+
+The publisher creates an unpublished release with `POST /repos/OWNER/REPO/releases`,
+`draft: true`, the exact source SHA and generated notes. It captures the **release ID and
+upload URL directly from that successful response**. Release listing is only a defensive
+pre-creation check: it is never used to rediscover the created draft. GitHub Actions tokens
+can omit drafts from tag/list discovery even after successfully creating them; see
+[CLI issue 3037](https://github.com/cli/cli/issues/3037),
+[5252](https://github.com/cli/cli/issues/5252) and
+[9076](https://github.com/cli/cli/issues/9076).
+
+Uploads use the returned, validated release-specific `upload_url` with raw binary bodies.
+Downloads use `GET /repos/OWNER/REPO/releases/assets/ASSET_ID` with authenticated octet-stream
+responses, streamed directly to disk through `gh api` (including its HTTP redirect handling).
+Neither transfer uses `gh release upload/download` or tag-based draft discovery.
+The [release API](https://docs.github.com/en/rest/releases/releases#create-a-release) and
+[asset API](https://docs.github.com/en/rest/releases/assets#get-a-release-asset) document these paths.
+
+The created release must have the expected ID/tag/source/channel, remain a draft and initially
+have no assets. All five assets (Windows ZIP, installer, AppImage, checksums and provenance)
+must have unique expected identities and complete GitHub size/state/SHA256 metadata. Every
+download is hashed against the verified build. Draft identity and metadata are reread by ID
+after transfers, and the remote tag object is rechecked before the ID-specific publish PATCH.
+Stable/prerelease and Latest policies are unchanged. Only IDs returned by this invocation's
+successful creation/upload responses are modified; existing releases and assets are never
+adopted, overwritten or deleted. Conflict or inaccessible ID responses stop the run. There
+is no mutation retry, tag edit or personal access token requirement.
 
 Build/test/package failures publish nothing. Inspect job logs and `diagnostics-*` artifacts.
-For transient failures rerun the unchanged build with
-`gh run rerun RUN_ID --failed --repo TheHiepDang/chiaki-ngx`.
+If publishing has started, **do not blindly rerun the tag workflow**: it uses the original
+tagged publisher code, and even a failed creation response may have left a draft. The error
+log and job summary record the new release ID when available. Inspect it read-only with a
+maintainer's authenticated CLI; do not use an empty release listing as proof no draft exists:
 
-Upload/verification interruptions may leave an **unpublished draft**. Inspect it first with
-`gh release view TAG --repo TheHiepDang/chiaki-ngx`. After confirming it is still a draft,
-explicitly delete that failed draft with `gh release delete TAG --repo TheHiepDang/chiaki-ngx`
-and rerun the failed publishing job. Do not use `--cleanup-tag`. If publication timed out,
-check whether it actually became public before retrying. Existing drafts/releases are refused,
-never overwritten. Source fixes require a new reviewed commit and new version tag.
+```sh
+gh api repos/TheHiepDang/chiaki-ngx/releases/RELEASE_ID \
+  --jq '{id,tag_name,draft,prerelease,published_at,assets:[.assets[]|{id,name,state,size,digest}]}'
+git ls-remote origin refs/tags/TAG 'refs/tags/TAG^{}'
+```
+
+Creation/upload/verification failures leave the draft and any partial assets intact. A timeout
+on the final PATCH may mean publication succeeded; inspect the ID before doing anything else.
+Do not delete/edit the draft, overwrite assets, retarget/delete tags, or retry mutations as an
+automatic recovery step. Any cleanup requires explicit maintainer approval. A source fix needs
+normal PR review, a merge into main and a **fresh version tag**, not a rerun of the old tag.
+
+### RC1 incident and RC2 plan
+
+Run [40485130607](https://github.com/TheHiepDang/chiaki-ngx/actions/runs/40485130607) built
+`v0.2.0-rc.1` at source `51e2760042d2d01b99a1ff2cf36871bdc95052a2`; all build jobs passed.
+The publisher created draft **425292968**, then failed its immediate release-list lookup
+before uploading anything. Read-only inspection confirmed `draft: true`, `prerelease: true`,
+zero assets and no publication. This matches the documented token/discovery failure pattern;
+the original list response was not retained, so its server-side cause cannot be distinguished
+from transient visibility using that log alone. The unsafe dependency on discovery is removed.
+
+The RC1 annotated tag object remains `a709e0af2a0f0fb20475e39941b3d1564e72c268`, pointing to
+the source SHA above. Preserve that tag and draft. After reviewing/merging this fix and passing
+full Windows/Linux validation on updated main, obtain maintainer approval for a new
+`v0.2.0-rc.2` tag. Confirm that version is unused, select the reviewed main commit and follow
+the stable/prerelease tagging procedure above. Its workflow rebuilds and validates the new
+version, then exercises ID-based publishing with the built-in token. Real-token publication
+is deliberately not exercised by PR tests. Review RC1 cleanup separately; it is not required
+to test the different RC2 tag.
