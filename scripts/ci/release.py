@@ -140,21 +140,22 @@ def downloads(group, folder):
         download_file(item['url'], item['sha256'], folder)
 
 
-def pe_imports(path):
+def pe_imports(path, machine=0x8664):
     """Read normal and delay-load PE imports without loading untrusted DLLs."""
     data = Path(path).read_bytes()
     if data[:2] != b'MZ':
         raise ValueError(f'Not a Windows executable: {path}')
     pe = struct.unpack_from('<I', data, 60)[0]
-    if data[pe:pe + 4] != b'PE\0\0' or struct.unpack_from('<H', data, pe + 4)[0] != 0x8664:
-        raise ValueError(f'Not a Windows x64 executable: {path}')
+    if data[pe:pe + 4] != b'PE\0\0' or struct.unpack_from('<H', data, pe + 4)[0] != machine:
+        raise ValueError(f'Unexpected Windows PE architecture (expected {machine:#x}): {path}')
     count = struct.unpack_from('<H', data, pe + 6)[0]
     optional_size = struct.unpack_from('<H', data, pe + 20)[0]
     optional = pe + 24
-    if struct.unpack_from('<H', data, optional)[0] != 0x20b:
-        raise ValueError('Expected PE32+')
+    is64 = machine == 0x8664
+    if struct.unpack_from('<H', data, optional)[0] != (0x20b if is64 else 0x10b):
+        raise ValueError('PE optional header does not match the expected architecture')
     sections = optional + optional_size
-    image_base = struct.unpack_from('<Q', data, optional + 24)[0]
+    image_base = struct.unpack_from('<Q' if is64 else '<I', data, optional + (24 if is64 else 28))[0]
     def offset(rva):
         for i in range(count):
             section = sections + 40 * i
@@ -167,7 +168,7 @@ def pe_imports(path):
         raise ValueError(f'Invalid PE RVA in {path}')
     names = set()
     for index, entry_size, name_field in ((1, 20, 12), (13, 32, 4)):
-        rva, length = struct.unpack_from('<II', data, optional + 112 + index * 8)
+        rva, length = struct.unpack_from('<II', data, optional + (112 if is64 else 96) + index * 8)
         if not rva:
             continue
         start = offset(rva)
@@ -183,7 +184,7 @@ def pe_imports(path):
     return names
 
 
-def windows_deps(folder):
+def windows_deps(folder, allow_inno_uninstaller=False):
     folder = Path(folder)
     files = [p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in ('.dll', '.exe')]
     if not files:
@@ -192,12 +193,15 @@ def windows_deps(folder):
     root_dlls = {p.name.lower() for p in folder.iterdir() if p.is_file()}
     for path in files:
         adjacent = {p.name.lower() for p in path.parent.iterdir() if p.is_file()}
-        for name in pe_imports(path):
-            if name.startswith(('api-ms-win-', 'ext-ms-')) or name in adjacent | root_dlls:
+        # Only Inno's generated root uninstaller may be PE32, and only after installation.
+        inno = allow_inno_uninstaller and path.parent == folder and path.name.lower() == 'unins000.exe'
+        import_system = system.parent / 'SysWOW64' if inno else system
+        for name in pe_imports(path, 0x14c if inno else 0x8664):
+            if name.startswith(('api-ms-win-', 'ext-ms-')) or (not inno and name in adjacent | root_dlls):
                 continue
-            if not (system / name).is_file():
+            if not (import_system / name).is_file():
                 raise ValueError(f'Missing packaged dependency: {path.relative_to(folder)} -> {name}')
-    print(f'[App][Package] Resolved imports for {len(files)} Windows x64 executables/plugins')
+    print(f'[App][Package] Resolved imports for {len(files)} application executables/plugins and permitted installer bootstrap files')
 
 
 def assets(platform, folder):
@@ -326,12 +330,13 @@ def main():
     parser.add_argument('--group')
     parser.add_argument('--platform', choices=PLATFORMS)
     parser.add_argument('--folder', default='dist')
+    parser.add_argument('--allow-inno-uninstaller', action='store_true')
     args = parser.parse_args()
     try:
         if args.operation == 'prepare': prepare(args.tag, args.target)
         elif args.operation == 'stamp': stamp(args.tag, args.commit)
         elif args.operation == 'download': downloads(args.group, args.folder)
-        elif args.operation == 'windows-deps': windows_deps(args.folder)
+        elif args.operation == 'windows-deps': windows_deps(args.folder, args.allow_inno_uninstaller)
         elif args.operation == 'assets': assets(args.platform, args.folder)
         else: publish(args.folder, args.tag, args.commit, args.tag_object)
         return 0

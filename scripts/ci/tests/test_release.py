@@ -189,27 +189,54 @@ class ReleaseTests(unittest.TestCase):
                 self.assertIn('make_latest=false', published[0])
             self.assertFalse(any('--clobber' in args for args in calls))
 
+    def test_only_installed_inno_bootstrap_can_be_32_bit(self):
+        folder = self.root / 'payload';folder.mkdir()
+        data = bytearray(512);data[:2] = b'MZ';struct.pack_into('<I',data,60,64);data[64:68] = b'PE\0\0'
+        struct.pack_into('<HH',data,68,0x14c,0);struct.pack_into('<H',data,84,224);struct.pack_into('<H',data,88,0x10b)
+        uninstaller = folder / 'unins000.exe';uninstaller.write_bytes(data)
+        with self.assertRaises(ValueError): release.windows_deps(folder)
+        with patch('sys.stdout',io.StringIO()): release.windows_deps(folder,allow_inno_uninstaller=True)
+        plugin = folder / 'plugin.dll';uninstaller.rename(plugin)
+        with self.assertRaises(ValueError): release.windows_deps(folder,allow_inno_uninstaller=True)
+        plugin.unlink();nested = folder / 'plugins';nested.mkdir();(nested / 'unins000.exe').write_bytes(data)
+        with self.assertRaises(ValueError): release.windows_deps(folder,allow_inno_uninstaller=True)
+
+    def test_inno_imports_use_32_bit_system_libraries(self):
+        folder = self.root / 'installed'; folder.mkdir()
+        (folder / 'unins000.exe').write_bytes(b'fixture')
+        system = self.root / 'Windows'
+        (system / 'System32').mkdir(parents=True)
+        (system / 'SysWOW64').mkdir()
+        (system / 'System32/kernel32.dll').write_bytes(b'64-bit system fixture')
+        with patch.dict(os.environ, {'SystemRoot': str(system)}), \
+                patch.object(release, 'pe_imports', return_value={'kernel32.dll'}) as parse:
+            with self.assertRaises(ValueError): release.windows_deps(folder, allow_inno_uninstaller=True)
+            parse.assert_called_with(folder / 'unins000.exe', 0x14c)
+            (system / 'SysWOW64/kernel32.dll').write_bytes(b'32-bit system fixture')
+            with patch('sys.stdout', io.StringIO()): release.windows_deps(folder, allow_inno_uninstaller=True)
+
     def test_pe_parser_checks_normal_and_delay_imports_and_architecture(self):
-        data = bytearray(1024)
-        data[:2] = b'MZ'
-        struct.pack_into('<I', data, 60, 64)
-        data[64:68] = b'PE\0\0'
-        struct.pack_into('<HH', data, 68, 0x8664, 1)
-        struct.pack_into('<H', data, 84, 240)
-        struct.pack_into('<H', data, 88, 0x20b)
-        struct.pack_into('<IIII', data, 336, 512, 0x1000, 512, 512)
-        struct.pack_into('<II', data, 208, 0x1000, 40)
-        struct.pack_into('<I', data, 524, 0x1080)
-        data[640:653] = b'Qt6Core.dll\0\0'
-        struct.pack_into('<II', data, 304, 0x1040, 64)
-        struct.pack_into('<II', data, 576, 1, 0x10a0)
-        data[672:685] = b'vulkan-1.dll\0'
-        path = self.root / 'sample.exe'
-        path.write_bytes(data)
-        self.assertEqual(release.pe_imports(path), {'qt6core.dll', 'vulkan-1.dll'})
-        struct.pack_into('<H', data, 68, 0x14c)
-        path.write_bytes(data)
-        with self.assertRaises(ValueError): release.pe_imports(path)
+        for machine, magic, optional_size, directory_offset in ((0x8664, 0x20b, 240, 112), (0x14c, 0x10b, 224, 96)):
+            with self.subTest(machine=machine):
+                data = bytearray(1024)
+                data[:2] = b'MZ'
+                struct.pack_into('<I', data, 60, 64)
+                data[64:68] = b'PE\0\0'
+                struct.pack_into('<HH', data, 68, machine, 1)
+                struct.pack_into('<H', data, 84, optional_size)
+                struct.pack_into('<H', data, 88, magic)
+                struct.pack_into('<IIII', data, 88 + optional_size + 8, 512, 0x1000, 512, 512)
+                struct.pack_into('<II', data, 88 + directory_offset + 8, 0x1000, 40)
+                struct.pack_into('<I', data, 524, 0x1080)
+                data[640:653] = b'Qt6Core.dll\0\0'
+                struct.pack_into('<II', data, 88 + directory_offset + 13 * 8, 0x1040, 64)
+                struct.pack_into('<II', data, 576, 1, 0x10a0)
+                data[672:685] = b'vulkan-1.dll\0'
+                path = self.root / 'sample.exe'
+                path.write_bytes(data)
+                self.assertEqual(release.pe_imports(path, machine), {'qt6core.dll', 'vulkan-1.dll'})
+                if machine == 0x14c:
+                    with self.assertRaises(ValueError): release.pe_imports(path)
 
 
 if __name__ == '__main__':

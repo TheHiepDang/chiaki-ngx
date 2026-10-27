@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-param([Parameter(Mandatory)][string]$Directory, [string]$Version, [switch]$BaselineOnly)
+param([Parameter(Mandatory)][string]$Directory, [string]$Version, [switch]$BaselineOnly, [switch]$Installed)
 $ErrorActionPreference = 'Stop'
 $directoryPath = (Resolve-Path -LiteralPath $Directory).Path
 foreach ($required in @('chiaki.exe','qt.conf','platforms/qwindows.dll','platforms/qoffscreen.dll','qml/QtQuick','qml/QtQuick/Controls','qml/QtQuick/Layouts')) {
@@ -8,7 +8,9 @@ foreach ($required in @('chiaki.exe','qt.conf','platforms/qwindows.dll','platfor
 foreach ($pattern in @('Qt6Core.dll','Qt6Gui.dll','Qt6Qml.dll','Qt6Quick.dll','*SDL2*.dll','*SDL3*.dll','avcodec-*.dll','avutil-*.dll','*placebo*.dll','*vulkan*.dll')) {
     if (!(Get-ChildItem -LiteralPath $directoryPath -Filter $pattern -File)) { throw "[App][Package] Missing runtime $pattern" }
 }
-& python (Join-Path $PSScriptRoot 'release.py') windows-deps --folder $directoryPath
+$dependencyArguments = @((Join-Path $PSScriptRoot 'release.py'), 'windows-deps', '--folder', $directoryPath)
+if ($Installed) { $dependencyArguments += '--allow-inno-uninstaller' }
+& python @dependencyArguments
 if ($LASTEXITCODE) { throw '[App][Package] Native dependency verification failed.' }
 if (!$BaselineOnly) {
     foreach ($required in @('enhancement/nvngx.dll','runtimes/runtime-manifest.json','build-info.json','updates/Install-Update.ps1')) {

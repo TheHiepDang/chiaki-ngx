@@ -44,5 +44,5 @@ foreach ($file in Get-ChildItem chiaki-ngx-Win -Recurse -File) {
         throw "[App][Package] Installer differs from portable payload: $relative"
     }
 }
-& ./scripts/ci/verify-windows.ps1 -Directory $installed -Version $Tag.Substring(1)
+& ./scripts/ci/verify-windows.ps1 -Directory $installed -Version $Tag.Substring(1) -Installed
 Write-Host '[App][Package] Portable and installer contain identical verified payloads.'

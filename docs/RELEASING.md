@@ -14,7 +14,6 @@ temporary Actions artifacts; only the tag-only publisher requests release-write 
 | Linux x86_64 AppImage | Required | Existing builder container and `scripts/build-appimage.sh` |
 | Windows ARM64 | Manual validation | Existing `build-windows-arm-portable.yml` / MSYS2 ARM workflows; RTX worker is currently x64-only |
 | Linux ARM64 AppImage | Manual validation | Existing `build-appimage-arm64.yml`; its older Qt builder and ARM deployment tools are not qualified by the x64 checks |
-| macOS ARM64 DMG | Manual validation | Existing `build-macos-arm.yml`; Homebrew paths, deployment/signing and runtime closure still need platform testing |
 | Windows x64 Visual C++ GUI | Experimental alternative | Existing `build-windows-x86.yml`, with package dependency/startup checks |
 
 Additional targets remain available, but are not silently included in releases as verified
@@ -32,7 +31,7 @@ Discord notifications.
 The MSYS2 path is closest to the existing working GUI deployment. The VC path has mutable
 Vulkan/shaderc downloads, an unpinned SPIRV-Cross checkout, and hand-maintained DLL copies;
 it remains manual until it passes the new clean-path validation and supplies the enhanced
-payload. Its old dependency recipe is not used for production. No claim of VC/ARM/macOS
+payload. Its old dependency recipe is not used for production. No claim of VC/ARM
 runtime verification follows from source review alone.
 
 ## One-time GitHub setup
@@ -50,8 +49,7 @@ retargets or deletes tags. GitHub-hosted Windows 2022 and Ubuntu 24.04 runners, 
 download access and sufficient Actions minutes/artifact storage are required.
 
 Before the first public tag, run a full manual validation and test its artifacts on real
-Windows/Steam Deck hardware. The implementation cannot be exercised remotely until it has
-been pushed with maintainer approval.
+Windows/Steam Deck hardware. Unmerged PRs exercise the same builds before a release tag is created.
 
 ## Stable release and prerelease
 
@@ -71,7 +69,7 @@ git push origin refs/tags/v0.2.0
 Use `v0.2.0-rc.1` instead for a prerelease. Any valid prerelease suffix creates a GitHub
 prerelease and is not marked Latest. Stable tags use GitHub's version-based Latest policy.
 Tags must be `vMAJOR.MINOR.PATCH[-prerelease]`, without numeric leading zeroes or `+metadata`;
-each main numeric component must fit Windows' 0ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“65535 resource range. Both stable and RC
+each main numeric component must fit Windows' 0-65535 resource range. Both stable and RC
 commits must already be reachable from remote `main`.
 
 CI overlays `cmake/Version.txt` with the tag's version before configuring either platform.
@@ -87,14 +85,14 @@ Unmerged pull requests automatically run **Validate Chiaki-ngx release packages*
 `build-pr.yaml`, reusing the exact Windows/Linux release-asset jobs with `contents: read`.
 PRs compile the checked-out merge commit, use a `-ci.RUN_NUMBER` label and an empty tag object,
 and never call a publishing job. `pull_request_target` is not used. Main ancestry is required
-only for actual release tags. Optional macOS/ARM PR checks run in `build-pr-optional.yml`;
-require the Windows/Linux checks in branch protection, not the optional workflow's conclusion.
+only for actual release tags. Require both Windows/Linux jobs in branch protection.
+Linux ARM64 remains a separate manual-only workflow and cannot block these checks.
 
 The inherited PR setup's MINGW64 catalog no longer lists hidapi even though historical package
 downloads remain visible. CLANG64 is the production path, with its checksum-locked dependency
 closure. The shared FFmpeg script always fetches the pinned GitHub commit (no git.ffmpeg.org
-fallback). Optional macOS builds use a coherent Qt 6.9.3 SDK, including WebEngine, instead of
-mixing Homebrew Qt 6.12 and WebEngine 6.11.2. WebEngine remains required in that job.
+fallback). See [CI architecture](CI-ARCHITECTURE.md) for the upstream comparison and
+explicit AppImage dependency boundary.
 
 
 Authenticate your terminal with GitHub CLI normally. CI uses its own token.
@@ -123,7 +121,7 @@ The updater stays on **TheHiepDang/chiaki-ngx** and preserves its legacy `chiaki
 publisher checks GitHub's asset digest, uploaded state and size as well as downloading the
 draft assets and verifying all bytes. Missing updater metadata prevents publication. Windows
 ZIPs include the worker, version-2 runtime manifest, executable hashes in `build-info.json`
-and `updates/Install-Update.ps1`, as required by existing installations. Linux/macOS continue
+and `updates/Install-Update.ps1`, as required by existing installations. Linux continues
 to use their existing release-page update behavior; no platform is redirected upstream.
 
 CI runs core, updater/channel/mock-network, QML and enhancement model/manifest tests. Windows
@@ -148,11 +146,16 @@ corruption; they are not independent signatures. Windows installer and binaries 
 unless a separate signing process is configured.
 
 
-Linux runtime baseline: the inherited AppImage recipe deliberately excludes the host's Vulkan
-and LibVA driver interfaces. SteamOS normally provides them. On Debian/Ubuntu desktops install
-`libvulkan1 libva2 libva-drm2 libva-x11-2 libegl1 libgl1` and the GPU vendor's driver. CI installs
-these same system interfaces before the outside-container startup test; it does not install Qt
-or borrow libraries from the build container. No video-decoding feature is disabled.
+Linux runtime baseline: Ubuntu 24.04 desktop or current SteamOS with equivalent C/C++, X11/
+Wayland, font/audio, GLVND, Vulkan and LibVA host interfaces plus the appropriate GPU driver.
+`scripts/ci/linux-runtime.json` defines the exact SONAME boundary and Ubuntu packages; CI installs
+that complete baseline without Qt or build-container paths. The complete ELF audit scans the
+launcher, executable, libraries, Qt plugins and helpers before startup, reports every unresolved
+library together, and rejects unbundled application dependencies and bundled GPU drivers.
+The always-retained `diagnostics-linux` artifact includes `appimage-elf-audit.json`, startup logs
+and the exact AppImage for inspection without recompiling. The JSON records each ELF's direct
+requirements, RPATH/RUNPATH and complete host-loader output (including symbol-version errors).
+SteamOS graphics and PS streaming still require hardware acceptance testing.
 
 ## Dependencies and maintenance
 

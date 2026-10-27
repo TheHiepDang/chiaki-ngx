@@ -137,7 +137,9 @@ jobs:
       - name: Install container tool and desktop runtime baseline
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman libvulkan1 libegl1 libgl1 libva2 libva-drm2 libva-x11-2
+          # The same reviewed policy drives installation and the complete ELF audit.
+          mapfile -t runtime_packages < <(python3 -c 'import json; p=json.load(open("scripts/ci/linux-runtime.json")); print("\n".join(sorted({n for g in p["host_groups"] for n in g["ubuntu_packages"]})))')
+          sudo apt-get install -y --no-install-recommends podman binutils "${runtime_packages[@]}"
       - name: Build with the existing AppImage toolchain
         run: |
           image=$(python3 -c 'import json; print(json.load(open("scripts/ci/dependencies.json"))["linux_image"])')
@@ -158,14 +160,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-      - name: Preserve Linux diagnostics
-        if: failure()
+      - name: Preserve Linux audit and diagnostics
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: diagnostics-linux
           path: |
             build/ci/*.log
             build/ci/linux-smoke/
+            build/ci/appimage-elf-audit.json
+            appimage/chiaki-ngx.AppImage
             build/ci-*/Testing/Temporary/*.log
             build_appimage/Testing/Temporary/*.log
           if-no-files-found: ignore
