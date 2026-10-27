@@ -12,6 +12,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -262,6 +263,38 @@ def find_release(tag):
     return next((r for page in pages for r in page if r['tag_name'] == tag), None)
 
 
+def release_identity(data, release_id, tag, commit, pre, draft=True):
+    if (type(release_id) is not int or release_id <= 0 or data.get('id') != release_id
+            or data.get('tag_name') != tag or data.get('target_commitish') != commit
+            or data.get('draft') is not draft or data.get('prerelease') is not pre):
+        raise ValueError('Release ID, tag, target, draft or channel identity mismatch')
+
+
+def uploaded_assets(data, expected, folder, uploaded_ids):
+    assets = data['assets']
+    api_assets = {a['name']: a for a in assets}
+    if len(assets) != len(api_assets) or set(api_assets) != set(expected):
+        raise ValueError('Unexpected or duplicate draft asset list')
+    for name, digest in expected.items():
+        asset = api_assets[name]
+        if (asset.get('id') != uploaded_ids[name] or asset.get('state') != 'uploaded'
+                or asset.get('digest') != 'sha256:' + digest
+                or asset.get('size') != (folder / name).stat().st_size):
+            raise ValueError(f'Incomplete or changed GitHub asset metadata: {name}')
+    return api_assets
+
+
+def download_release_asset(asset_id, destination):
+    """Stream authenticated bytes by asset ID; never discover a draft by tag.
+
+    gh api handles the documented direct-200 / redirect-302 download responses.
+    stdout is a binary file, so assets are never decoded as text or held in RAM.
+    """
+    with Path(destination).open('wb') as stream:
+        subprocess.run(['gh', 'api', f'repos/{REPO}/releases/assets/{asset_id}',
+                        '-H', 'Accept: application/octet-stream'], stdout=stream, check=True)
+
+
 def publish(folder, tag, commit, tag_object):
     pre = version(tag)
     if (os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_EVENT_NAME') != 'push'
@@ -280,42 +313,72 @@ def publish(folder, tag, commit, tag_object):
     if find_release(tag):
         raise ValueError('A release or draft already exists; never overwrite it')
     with tempfile.TemporaryDirectory(prefix='chiaki-release-') as temporary:
-        notes = Path(temporary) / 'notes.md'
-        notes.write_text(f'Source: https://github.com/{REPO}/commit/{commit}\n\n'
-                         f'Build: https://github.com/{REPO}/actions/runs/{os.environ.get("GITHUB_RUN_ID", "")}\n\n'
-                         'Windows x64: portable ZIP (automatic updates) or installer. Linux x86_64: AppImage. '
-                         'NR DLL is user supplied; Windows FG/SM86 runtimes are bundled. '
-                         'See SHA256SUMS and BUILD-PROVENANCE.json for verification.\n\n', encoding='utf-8')
-        args = ['release', 'create', tag, '--repo', REPO, '--verify-tag', '--draft', '--generate-notes',
-                '--title', f'Chiaki-ngx {tag}', '--notes-file', str(notes)]
-        if pre:
-            args.append('--prerelease')
-        gh(*args)
-        created = find_release(tag)
-        if not created or not created['draft']:
-            raise ValueError('Expected a newly created draft')
+        request = Path(temporary) / 'create.json'
+        write_json(request, {
+            'tag_name': tag, 'target_commitish': commit, 'name': f'Chiaki-ngx {tag}',
+            'draft': True, 'prerelease': pre, 'generate_release_notes': True,
+            'body': f'Source: https://github.com/{REPO}/commit/{commit}\n\n'
+                    f'Build: https://github.com/{REPO}/actions/runs/{os.environ.get("GITHUB_RUN_ID", "")}\n\n'
+                    'Windows x64: portable ZIP (automatic updates) or installer. Linux x86_64: AppImage. '
+                    'NR DLL is user supplied; Windows FG/SM86 runtimes are bundled. '
+                    'See SHA256SUMS and BUILD-PROVENANCE.json for verification.\n\n',
+        })
+        release_id = None
         try:
-            gh('release', 'upload', tag, *map(str, paths), '--repo', REPO)
+            # POST creates only; never adopt an existing draft or retry a mutation.
+            # Its response is authoritative: GITHUB_TOKEN release listings may omit drafts.
+            created = json.loads(gh('api', '--method', 'POST', f'repos/{REPO}/releases',
+                                    '-H', 'Content-Type: application/json', '--input', str(request)))
+            release_id = created.get('id')
+            release_identity(created, release_id, tag, commit, pre)
+            if created.get('assets') != []:
+                raise ValueError('New draft unexpectedly contains assets')
+            endpoint = f'repos/{REPO}/releases/{release_id}'
+            upload = f'https://uploads.github.com/{endpoint}/assets'
+            if created.get('upload_url') not in (upload, upload + '{?name,label}'):
+                raise ValueError('Unexpected release upload URL')
+            upload = created['upload_url'].removesuffix('{?name,label}')
+            print(f'[Release] Created draft ID {release_id} for {tag}; subsequent operations use this ID.')
+            if os.environ.get('GITHUB_STEP_SUMMARY'):
+                with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as stream:
+                    stream.write(f'Created draft release ID **{release_id}** for `{tag}`. '
+                                 f'Inspect with `gh api {endpoint}` if publication fails.\n')
+            uploaded_ids = {}
+            for path in paths:
+                asset = json.loads(gh('api', '--method', 'POST', upload + '?' + urllib.parse.urlencode({'name': path.name}),
+                                      '-H', 'Content-Type: application/octet-stream',
+                                      '-H', f'Content-Length: {path.stat().st_size}', '--input', str(path)))
+                asset_id = asset.get('id')
+                if (type(asset_id) is not int or asset_id <= 0 or asset_id in uploaded_ids.values()
+                        or asset.get('name') != path.name):
+                    raise ValueError('Upload returned an invalid asset identity')
+                uploaded_ids[path.name] = asset_id
+            uploaded = json.loads(gh('api', endpoint))
+            release_identity(uploaded, release_id, tag, commit, pre)
+            api_assets = uploaded_assets(uploaded, expected, folder, uploaded_ids)
             check = Path(temporary) / 'downloaded'
-            gh('release', 'download', tag, '--repo', REPO, '--dir', str(check))
+            check.mkdir()
+            for name, asset in api_assets.items():
+                download_release_asset(asset['id'], check / name)
             if {p.name: sha(p) for p in check.iterdir() if p.is_file()} != expected:
                 raise ValueError('Downloaded release assets differ from the verified build')
-            # The existing updater requires GitHub's own digest/state/size metadata.
-            uploaded = find_release(tag)
-            api_assets = {a['name']: a for a in uploaded['assets']}
-            if set(api_assets) != set(expected):
-                raise ValueError('Unexpected draft asset list')
-            for name, digest in expected.items():
-                asset = api_assets[name]
-                if (asset.get('state') != 'uploaded' or asset.get('digest') != 'sha256:' + digest
-                        or asset.get('size') != (folder / name).stat().st_size):
-                    raise ValueError(f'Incomplete GitHub asset metadata: {name}')
+            # Recheck both draft metadata and the immutable tag identity after transfers.
+            uploaded = json.loads(gh('api', endpoint))
+            release_identity(uploaded, release_id, tag, commit, pre)
+            uploaded_assets(uploaded, expected, folder, uploaded_ids)
             same_tag(tag, tag_object)
-            gh('api', '--method', 'PATCH', f'repos/{REPO}/releases/{created["id"]}',
-               '-F', 'draft=false', '-F', 'prerelease=' + str(pre).lower(),
-               '-f', 'make_latest=' + ('false' if pre else 'legacy'))
+            published = json.loads(gh('api', '--method', 'PATCH', endpoint,
+                                     '-F', 'draft=false', '-F', 'prerelease=' + str(pre).lower(),
+                                     '-f', 'make_latest=' + ('false' if pre else 'legacy')))
+            release_identity(published, release_id, tag, commit, pre, draft=False)
         except Exception:
-            print(f'::error::Publication failed. Inspect draft {created["id"]}; retries never overwrite it.', file=sys.stderr)
+            if type(release_id) is int and release_id > 0:
+                print(f'::error::[Release] Publication interrupted for release ID {release_id}. '
+                      f'Inspect with gh api repos/{REPO}/releases/{release_id}; it may be draft or published. '
+                      'No automatic cleanup or retry was attempted.', file=sys.stderr)
+            else:
+                print('::error::[Release] Creation may have failed or its response was lost. '
+                      'Inspect releases as a maintainer before retrying; no automatic cleanup was attempted.', file=sys.stderr)
             raise
     print(f'Published https://github.com/{REPO}/releases/tag/{tag}')
 

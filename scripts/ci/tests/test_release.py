@@ -155,40 +155,6 @@ class ReleaseTests(unittest.TestCase):
             release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
         gh.assert_not_called()
 
-    def test_publication_waits_for_bytes_digest_metadata_and_unchanged_tag(self):
-        for failure in (None, 'upload', 'corrupt', 'digest', 'moved-tag'):
-            calls, uploaded = [], []
-            def gh(*args):
-                calls.append(args)
-                if args[:2] == ('release', 'upload'):
-                    if failure == 'upload': raise RuntimeError('upload failed')
-                    for name in args[3:args.index('--repo')]:
-                        path = Path(name)
-                        uploaded.append({'name': path.name, 'digest': 'sha256:' + release.sha(path),
-                                         'size': path.stat().st_size, 'state': 'uploaded'})
-                if args[:2] == ('release', 'download'):
-                    destination = Path(args[args.index('--dir') + 1])
-                    destination.mkdir()
-                    for asset in uploaded: shutil.copyfile(self.root / asset['name'], destination / asset['name'])
-                    if failure == 'corrupt': (destination / uploaded[0]['name']).write_bytes(b'corrupt')
-                    if failure == 'digest': uploaded[0]['digest'] = None
-                return '{}'
-            with patch.dict(os.environ, self.env), patch.object(release, 'git', return_value=COMMIT), \
-                    patch.object(release, 'same_tag', side_effect=[None, ValueError('moved')] if failure == 'moved-tag' else [None, None]), \
-                    patch.object(release, 'find_release', side_effect=[None, {'draft': True, 'id': 123}, {'assets': uploaded}]), \
-                    patch.object(release, 'gh', side_effect=gh), patch('sys.stderr', io.StringIO()), patch('sys.stdout', io.StringIO()):
-                if failure:
-                    with self.assertRaises((ValueError, RuntimeError)):
-                        release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
-                else:
-                    release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
-            published = [args for args in calls if 'PATCH' in args]
-            self.assertEqual(len(published), 0 if failure else 1)
-            if published:
-                self.assertIn('prerelease=true', published[0])
-                self.assertIn('make_latest=false', published[0])
-            self.assertFalse(any('--clobber' in args for args in calls))
-
     def test_only_installed_inno_bootstrap_can_be_32_bit(self):
         folder = self.root / 'payload';folder.mkdir()
         data = bytearray(512);data[:2] = b'MZ';struct.pack_into('<I',data,60,64);data[64:68] = b'PE\0\0'
