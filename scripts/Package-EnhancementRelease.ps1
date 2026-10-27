@@ -91,11 +91,14 @@ $sourceInfoPath = Join-Path $sourceRoot 'build-info.json'
 $info = [ordered]@{}
 if (Test-Path -LiteralPath $sourceInfoPath) {
     $sourceInfo = Get-Content -LiteralPath $sourceInfoPath -Raw | ConvertFrom-Json
-    foreach ($key in @('variant','base_commit','build_type','built_at','source_state',
+    foreach ($key in @('variant','base_commit','build_type','built_at','source_state','app_version','release_channel','release_tag',
             'gui_sha256','worker_sha256','source_patch_sha256','limits')) {
         if ($null -ne $sourceInfo.$key) { $info[$key] = $sourceInfo.$key }
     }
 }
+New-Item -ItemType Directory -Path (Join-Path $destinationRoot 'updates') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-Update.ps1') -Destination (Join-Path $destinationRoot 'updates/Install-Update.ps1') -Force
+$info['app_version'] = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $destinationRoot 'chiaki.exe')).ProductVersion
 $info['packaged_at'] = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(7)).ToString('o')
 $info['update'] = 'bundled-fg-runtime-nr-user-supplied'
 $info['runtime_manifest_sha256'] = (Get-FileHash -LiteralPath (Join-Path $destinationRoot 'runtimes/runtime-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()

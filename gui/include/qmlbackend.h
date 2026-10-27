@@ -5,6 +5,7 @@
 #include "qmlmainwindow.h"
 #include "qmlcontroller.h"
 #include "qmlsettings.h"
+#include "updatechecker.h"
 
 #include <QObject>
 #include <QMutex>
@@ -80,6 +81,7 @@ class QmlBackend : public QObject
     Q_OBJECT
     Q_PROPERTY(QmlMainWindow* window READ qmlWindow CONSTANT)
     Q_PROPERTY(QmlSettings* settings READ qmlSettings CONSTANT)
+    Q_PROPERTY(UpdateChecker* updates READ qmlUpdates CONSTANT)
     Q_PROPERTY(StreamSession* session READ qmlSession NOTIFY sessionChanged)
     Q_PROPERTY(QList<QmlController*> controllers READ qmlControllers NOTIFY controllersChanged)
     Q_PROPERTY(bool discoveryEnabled READ discoveryEnabled WRITE setDiscoveryEnabled NOTIFY discoveryEnabledChanged)
@@ -116,6 +118,7 @@ public:
 
     QmlMainWindow *qmlWindow() const;
     QmlSettings *qmlSettings() const;
+    UpdateChecker *qmlUpdates() const { return updates_obj; }
     StreamSession *qmlSession() const;
     QList<QmlController*> qmlControllers() const;
 
@@ -284,6 +287,7 @@ private:
 
     Settings *settings = {};
     QmlSettings *settings_qml = {};
+    UpdateChecker *updates_obj = {};
     QmlMainWindow *window = {};
     StreamSession *session = {};
     QThread *frame_thread = {};

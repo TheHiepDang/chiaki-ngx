@@ -11,16 +11,20 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $releaseRoot = Join-Path $repoRoot 'release'
 $destination = Join-Path $releaseRoot 'ngx'
-$workRoot = Join-Path $repoRoot 'build-local-release'
+$workRoot = Join-Path $repoRoot 'build/local-release'
 $next = Join-Path $workRoot 'next'
 $previous = Join-Path $workRoot 'previous'
 $logRoot = Join-Path $workRoot 'logs'
 if (!$InputDirectory) { $InputDirectory = $destination }
 if (!$GuiBuildDirectory) {
+    $currentBuild = Join-Path $repoRoot 'build/gui'
     $clangBuild = Join-Path $repoRoot 'build-clang-gui'
-    $GuiBuildDirectory = if (Test-Path -LiteralPath (Join-Path $clangBuild 'CMakeCache.txt')) { $clangBuild } else { Join-Path $repoRoot 'build-rc-gui' }
+    $GuiBuildDirectory = if (Test-Path -LiteralPath (Join-Path $currentBuild 'CMakeCache.txt')) { $currentBuild } elseif (Test-Path -LiteralPath (Join-Path $clangBuild 'CMakeCache.txt')) { $clangBuild } else { Join-Path $repoRoot 'build-rc-gui' }
 }
-if (!$WorkerBuildDirectory) { $WorkerBuildDirectory = Join-Path $repoRoot 'build-rc-worker' }
+if (!$WorkerBuildDirectory) {
+    $currentWorker = Join-Path $repoRoot 'build/worker'
+    $WorkerBuildDirectory = if (Test-Path -LiteralPath (Join-Path $currentWorker 'CMakeCache.txt')) { $currentWorker } else { Join-Path $repoRoot 'build-rc-worker' }
+}
 $inputRoot = (Resolve-Path -LiteralPath $InputDirectory).Path
 $guiBuild = (Resolve-Path -LiteralPath $GuiBuildDirectory).Path
 $workerBuild = (Resolve-Path -LiteralPath $WorkerBuildDirectory).Path
@@ -150,6 +154,7 @@ try {
     $changes = @(& git -C $repoRoot status --porcelain --untracked-files=normal)
     if ($LASTEXITCODE) { throw 'Could not read source status.' }
     $info = [ordered]@{
+        app_version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $next 'chiaki.exe')).ProductVersion
         variant = 'ngx'; base_commit = $head; build_type = 'Release'
         built_at = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(7)).ToString('o')
         source_state = $(if ($changes.Count) { 'working tree with local changes' } else { 'clean' })
@@ -161,6 +166,8 @@ try {
         runtime_directory = 'runtimes'; worker_path = 'enhancement/nvngx.dll'
         external_runtime_policy = $(if ($localNr) { 'Supplied NR runtime included for local testing; public packaging omits NR.' } else { 'NR is user supplied; FG and SM86 are bundled.' })
     }
+    New-Item -ItemType Directory -Path (Join-Path $next 'updates') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-Update.ps1') -Destination (Join-Path $next 'updates/Install-Update.ps1') -Force
     $info | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $next 'build-info.json') -Encoding utf8
     AssertNotRunning @($destination, $next, $previous)
     New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null

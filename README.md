@@ -17,6 +17,10 @@ Check [NVIDIA’s DLSS SDK](https://github.com/NVIDIA/DLSS) or [TechPowerUp](htt
 
 RTX 40/50 use native FG. RTX 20/30 use the bundled unofficial SM86 route.
 
+## Updates
+
+Choose **Release** or **Pre-release** at the bottom right. The app checks at startup; click **Update** when a newer version is available. Windows portable updates verify the download, preserve your settings and supplied NR DLL, then restart the app. End your stream before updating.
+
 ## NR passes
 
 During streaming, open **RTX settings** with **Ctrl+Shift+F**. Enable Neural Rendering and choose **1, 2 or 3 passes**. Extra passes follow pass 1 by default. Check **Customize each pass**, then **Configure pass**, to edit them independently; saved custom values are kept when you switch back.
@@ -37,7 +41,7 @@ Native NR (100% resolution) vs. Upscaled NR (75% resolution, 30-40% performance 
 
 ## Bug reports
 
-Open **Settings → General → Log Directory → Open**. Include the matching **`chiaki_ngx_*.log`** and **`.previous.log`** if present, plus **`chiaki_session_*.log`** for streaming issues. Include crash text if created; share crash dumps privately. NR pass diagnostics use **`[RTX][NR][Pass1]`**, **`[RTX][NR][Pass2]`** and **`[RTX][NR][Pass3]`**. See [reporting details](docs/diy/enhancements.md#bug-reports) for SM86 logs and other information to attach.
+Open **Settings → General → Log Directory → Open**. Include the matching **`chiaki_ngx_*.log`** and **`.previous.log`** if present, plus **`chiaki_session_*.log`** for streaming issues. Include crash text if created; share crash dumps privately. For update failures, also include the matching **`chiaki_update_*.log`** from the same log directory. NR pass diagnostics use **`[RTX][NR][Pass1]`**, **`[RTX][NR][Pass2]`** and **`[RTX][NR][Pass3]`**. See [reporting details](docs/diy/enhancements.md#bug-reports) for SM86 logs and other information to attach.
 
 ## Credits
 

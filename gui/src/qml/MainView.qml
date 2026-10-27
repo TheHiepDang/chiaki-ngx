@@ -183,8 +183,8 @@ Pane {
             top: toolBar.bottom
             left: parent.left
             right: parent.right
-            bottom: parent.bottom
-            bottomMargin: 50
+            bottom: updateBar.top
+            bottomMargin: 10
         }
         clip: true
         model: Chiaki.hosts
@@ -409,13 +409,18 @@ Pane {
         Material.background: Material.accent
     }
 
-    Label {
-        anchors {
-            right: parent.right
-            bottom: parent.bottom
-            margins: 20
+    UpdateBar {
+        id: updateBar
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 20
+        width: Math.min(implicitWidth, parent.width - 140)
+        onInstallRequested: {
+            if (!Chiaki.updates.canInstall) { Chiaki.updates.openReleasePage(); return; }
+            root.showConfirmDialog(qsTr("Install update"),
+                qsTr("Download and install v%1? Chiaki will restart after the package is verified. Your settings and supplied NR runtime will be kept.").arg(Chiaki.updates.availableVersion),
+                () => Chiaki.updates.installUpdate());
         }
-        text: Qt.application.version
     }
 
     Image {

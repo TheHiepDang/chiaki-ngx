@@ -92,7 +92,7 @@ QString DiagnosticLog::reportInstructions() {
     return QStringLiteral(
         "Report a bug: https://github.com/TheHiepDang/chiaki-ngx/issues/new\n"
         "Attach the matching chiaki_ngx_*.log (and .previous.log if present), "
-        "chiaki_session_*.log and any matching *-crash.txt.\n"
+        "chiaki_session_*.log and any matching *-crash.txt. For update failures, include chiaki_update_*.log.\n"
         "Open the folder with Settings > General > Log Directory > Open.\n"
         "For SM86 FG also attach matching loader_*.jsonl and backend_*.jsonl from "
         "runtimes/sm86-proxy/dlssg_sm86/logs/ inside the release folder.\n"

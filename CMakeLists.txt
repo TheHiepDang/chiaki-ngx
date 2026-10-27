@@ -38,10 +38,7 @@ tri_option(CHIAKI_USE_SYSTEM_CURL "Use system-provided curl instead of submodule
 option(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT "Build json-c from source via FetchContent" OFF)
 option(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT "Build miniupnpc from source via FetchContent" OFF)
 
-set(CHIAKI_VERSION_MAJOR 1)
-set(CHIAKI_VERSION_MINOR 10)
-set(CHIAKI_VERSION_PATCH 0)
-set(CHIAKI_VERSION ${CHIAKI_VERSION_MAJOR}.${CHIAKI_VERSION_MINOR}.${CHIAKI_VERSION_PATCH})
+include(cmake/Version.cmake)
 
 set(CPACK_PACKAGE_NAME "chiaki-ngx")
 set(CPACK_PACKAGE_DESCRIPTION "Open Source PlayStation Remote Play client for Linux, Mac, and Windows")

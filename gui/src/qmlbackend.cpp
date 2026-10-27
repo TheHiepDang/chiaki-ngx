@@ -288,6 +288,7 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     : QObject(window)
     , settings(settings)
     , settings_qml(new QmlSettings(settings, this))
+    , updates_obj(new UpdateChecker(this))
     , window(window)
 {
     qt_msg_handler = qInstallMessageHandler(msg_handler);
@@ -296,6 +297,8 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     qmlRegisterSingletonInstance(uri, 1, 0, "Chiaki", this);
     qmlRegisterUncreatableType<QmlMainWindow>(uri, 1, 0, "ChiakiWindow", {});
     qmlRegisterUncreatableType<QmlSettings>(uri, 1, 0, "ChiakiSettings", {});
+    qmlRegisterUncreatableType<UpdateChecker>(uri, 1, 0, "ChiakiUpdates", {});
+    connect(this, &QmlBackend::sessionChanged, this, [this] { updates_obj->setInstallAllowed(session == nullptr); });
     qmlRegisterUncreatableType<StreamSession>(uri, 1, 0, "ChiakiSession", {});
 
     QObject *frame_obj = new QObject();
