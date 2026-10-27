@@ -39,6 +39,9 @@ int main(int argc, char *argv[]) { return real_main(argc, argv); }
 #endif
 
 #include <QCommandLineParser>
+#include <QQmlEngine>
+#include <QQmlComponent>
+#include <memory>
 #include <QMap>
 #include <QSurfaceFormat>
 #include <QDir>
@@ -143,6 +146,9 @@ int real_main(int argc, char *argv[])
 	QCommandLineParser parser;
 	parser.setOptionsAfterPositionalArgumentsMode(QCommandLineParser::ParseAsPositionalArguments);
 	parser.addHelpOption();
+	parser.addVersionOption();
+	const QCommandLineOption package_smoke_option("package-smoke-test", "Check packaged Qt/QML without connecting to a console.");
+	parser.addOption(package_smoke_option);
 	
 	QStringList cmds;
 	cmds.append("stream");
@@ -185,6 +191,15 @@ int real_main(int argc, char *argv[])
 
 	parser.process(app);
 	QStringList args = parser.positionalArguments();
+    if (parser.isSet(package_smoke_option)) {
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nimport QtQuick.Controls\nimport QtQuick.Layouts\nItem { Button {} RowLayout {} }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        if (!object) { qCritical() << "[App][Package] Qt/QML startup failed:" << component.errors(); return 1; }
+        qInfo() << "[App][Package] Qt/QML startup passed; version=" << app.applicationVersion();
+        return 0;
+    }
 
     if (qEnvironmentVariableIsSet("CHIAKI_RENDER_DIAGNOSTIC")) {
         const QString root = qEnvironmentVariable("CHIAKI_RENDER_DIAGNOSTIC_ROOT");

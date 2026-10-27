@@ -7,7 +7,7 @@ shift
 ROOT="`pwd`"
 
 TAG=n7.1
-NV_CODEC_TAG=n13.0.19.0
+NV_CODEC_TAG=${NV_CODEC_TAG:-n13.0.19.0}
 
 FFMPEG_NV_CODEC_FLAGS=()
 if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]
@@ -31,7 +31,14 @@ then
     )
 fi
 
-git clone https://git.ffmpeg.org/ffmpeg.git --depth 1 -b $TAG && cd ffmpeg || exit 1
+if [[ -n ${FFMPEG_COMMIT:-} ]]; then
+    git init ffmpeg && git -C ffmpeg remote add origin https://github.com/FFmpeg/FFmpeg.git || exit 1
+    git -C ffmpeg fetch --depth 1 origin "$FFMPEG_COMMIT" || exit 1
+    git -C ffmpeg checkout --detach FETCH_HEAD || exit 1
+    cd ffmpeg || exit 1
+else
+    git clone https://git.ffmpeg.org/ffmpeg.git --depth 1 -b $TAG && cd ffmpeg || exit 1
+fi
 git apply ${SCRIPT_DIR}/flatpak/0001-vulkan-ignore-frames-without-hw-context.patch || exit 1
 ./configure --disable-all --enable-static --enable-avformat --enable-vulkan --enable-libdrm --enable-avcodec --enable-decoder=h264 --enable-decoder=hevc --enable-hwaccel=h264_vaapi --enable-hwaccel=hevc_vaapi --enable-hwaccel=h264_vulkan --enable-hwaccel=hevc_vulkan "${FFMPEG_NV_CODEC_FLAGS[@]}" --prefix=/usr "$@" || exit 1
 make -j4 || exit 1

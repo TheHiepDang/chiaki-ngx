@@ -182,6 +182,12 @@ jobs:
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\spirv-cross-c-shared.dll" chiaki-ngx-Win
           windeployqt.exe --no-translations --qmldir=gui\src\qml --release chiaki-ngx-Win\chiaki.exe
 
+      - name: Validate the VC deployment (experimental toolchain)
+        shell: pwsh
+        run: |
+          "[Paths]`nPrefix=.`nPlugins=.`nQmlImports=qml`nQml2Imports=qml`nLibraryExecutables=.`n" | Set-Content chiaki-ngx-Win/qt.conf
+          ./scripts/ci/verify-windows.ps1 -Directory chiaki-ngx-Win -BaselineOnly
+
       - name: Package chiaki-ngx
         run: |
           $CHIAKI_VERSION = (Get-Content -LiteralPath .\cmake\Version.txt -Raw).Trim()

@@ -11,7 +11,8 @@ if [ ! -d "libplacebo" ]; then
 git clone --recursive https://github.com/haasn/libplacebo.git || exit 1
 fi
 cd libplacebo || exit 1
-git checkout $TAG || exit 1
+git checkout --recurse-submodules "$TAG" || exit 1
+git submodule update --init --recursive || exit 1
 DIR=./build || exit 1
 meson setup --prefix /usr -Dxxhash=disabled $DIR || exit 1
 ninja -C$DIR || exit 1

@@ -72,14 +72,22 @@ done < <(find "${SDL_LIB_DIRS[@]}" \
 cd appimage
 
 export ARCH="$(uname -m)"
-curl -L -O https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage
+if [[ ${CHIAKI_RELEASE_LOCKED:-0} == 1 ]]; then
+    python3 ../scripts/ci/release.py download --group linuxdeploy --folder "linuxdeploy-${ARCH}.AppImage"
+else
+    curl -fL -O https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage
+fi
 chmod +x linuxdeploy-${ARCH}.AppImage
 
 export LD_LIBRARY_PATH="${QT_DIR}/${GCC_STRING}/lib:$(pwd)/../build_appimage/third-party/cpp-steam-tools:$LD_LIBRARY_PATH"
 export QML_SOURCES_PATHS="$(pwd)/../gui/src/qml"
 export EXTRA_QT_MODULES="waylandclient;waylandcompositor"
 export EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so;libqeglfs.so;libqminimal.so;libqminimalegl.so;libqvkkhrdisplay.so;libqvnc.so;libqoffscreen.so;libqlinuxfb.so"
-curl -L -O https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${ARCH}.AppImage
+if [[ ${CHIAKI_RELEASE_LOCKED:-0} == 1 ]]; then
+    python3 ../scripts/ci/release.py download --group linuxdeploy-qt --folder "linuxdeploy-plugin-qt-${ARCH}.AppImage"
+else
+    curl -fL -O https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${ARCH}.AppImage
+fi
 chmod +x linuxdeploy-plugin-qt-${ARCH}.AppImage
 ./linuxdeploy-${ARCH}.AppImage \
     --appdir="${appdir}" \
