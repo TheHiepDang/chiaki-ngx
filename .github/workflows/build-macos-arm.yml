@@ -1,62 +1,76 @@
-name: Build chiaki-ngx macOSX arm64
-
+name: Optional Chiaki-ngx macOS ARM64 validation
 on:
   workflow_dispatch:
-
+  workflow_call:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   build-mac_arm64_github:
-    name: Build macOSX arm64 version Github
     runs-on: macos-15
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
         with:
           submodules: recursive
-
-      - name: Install protobuf
+          persist-credentials: false
+      - name: Install coherent official Qt SDK (not Homebrew Qt)
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06
+        with:
+          version: '6.9.3'
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtwebengine qtwebchannel qtpositioning qtwebsockets qtserialport
+          aqtversion: '==3.3.0'
+          py7zrversion: '==1.1.0'
+          cache: false
+      - name: Install non-Qt dependencies and verify SDK
         run: |
-          pip3 install --user 'protobuf>=5,<6' --break-system-packages
-      - name: Install brew dependencies
+          brew install ffmpeg pkgconf opus openssl@3 cmake ninja nasm protobuf@29 speexdsp libplacebo wget python-setuptools json-c miniupnpc libevent
+          python3 -m pip install 'protobuf==5.29.5' --break-system-packages
+          test "$("$QT_ROOT_DIR/bin/qmake" -query QT_VERSION)" = '6.9.3'
+          test -f "$QT_ROOT_DIR/lib/cmake/Qt6WebEngineQuick/Qt6WebEngineQuickConfig.cmake"
+          brew list --versions
+      - name: Build SDL compatibility runtimes
         run: |
-          brew update
-          brew uninstall pkgconfig || true
-          brew install --force qt@6 ffmpeg pkgconfig opus openssl@3 cmake ninja nasm protobuf@29 speexdsp libplacebo wget python-setuptools json-c miniupnpc libevent
-
-      - name: Install sdl2-compat
+          INSTALL_PREFIX="$(brew --prefix)" bash scripts/build-sdl2-compat.sh .
+          cp "$(brew --prefix)/lib/pkgconfig/sdl2-compat.pc" "$(brew --prefix)/lib/pkgconfig/sdl2.pc"
+      - name: Configure chiaki-ngx with required WebEngine
         run: |
-          sudo INSTALL_PREFIX=/usr/local scripts/build-sdl2-compat.sh
-          sudo cp /usr/local/lib/pkgconfig/sdl2-compat.pc /usr/local/lib/pkgconfig/sdl2.pc
-
-      - name: Configure chiaki-ngx
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCHIAKI_ENABLE_CLI=OFF -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix)/opt/openssl@3" \
+            -DQt6_DIR="$QT_ROOT_DIR/lib/cmake/Qt6" \
+            -DCMAKE_REQUIRE_FIND_PACKAGE_Qt6WebEngineQuick=ON \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/protobuf@29" \
+            -DCMAKE_IGNORE_PREFIX_PATH="$(brew --prefix)/opt/qt@6;$(brew --prefix)/opt/qt"
+      - name: Build and test chiaki-ngx
         run: |
-          cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCHIAKI_ENABLE_CLI=OFF -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF -DOPENSSL_ROOT_DIR="$(brew --prefix)/opt/openssl@3" -DCMAKE_PREFIX_PATH="$(brew --prefix)/opt/openssl@3;$(brew --prefix)/opt/qt@6;$(brew --prefix)/opt/protobuf@29"
-
-      - name: Build chiaki-ngx
-        run: |
-          export CPATH=$(brew --prefix)/opt/ffmpeg/include
-          cmake --build build --config Release --clean-first --target chiaki
-
+          export CPATH="$(brew --prefix)/opt/ffmpeg/include"
+          cmake --build build --config Release --parallel 3
+          ctest --test-dir build --output-on-failure
       - name: Deploy chiaki-ngx
         run: |
           rm -rf chiaki-ngx.app chiaki-ngx.dmg
           cp -a build/gui/chiaki.app chiaki-ngx.app
           cp scripts/qtwebengine_import.qml gui/src/qml/
-          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
+          "$QT_ROOT_DIR/bin/macdeployqt" chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
           mkdir -p chiaki-ngx.app/Contents/Resources/vulkan/icd.d
           wget https://github.com/KhronosGroup/MoltenVK/releases/download/v1.2.9/MoltenVK-macos.tar && tar xf MoltenVK-macos.tar
           cp MoltenVK/MoltenVK/dylib/macOS/* chiaki-ngx.app/Contents/Resources/vulkan/icd.d
-          $(brew --prefix)/opt/qt@6/bin/macdeployqt chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
-          if [[ -d chiaki-ngx.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app ]]
-          then
-            ln -s ../../../../../../../Frameworks chiaki-ngx.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents
-          fi
-          cp /usr/local/lib/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
-          cp /usr/local/lib/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
+          "$QT_ROOT_DIR/bin/macdeployqt" chiaki-ngx.app -qmldir="$PWD/gui/src/qml" -libpath=$(brew --prefix)/lib
+          ln -sfn ../../../../../../../Frameworks chiaki-ngx.app/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents
+          cp $(brew --prefix)/lib/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
+          cp $(brew --prefix)/lib/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
           install_name_tool -id @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL3.dylib
           install_name_tool -id @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib
-          install_name_tool -change /usr/local/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
+          install_name_tool -change $(brew --prefix)/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
           install_name_tool -change @rpath/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
           install_name_tool -change /opt/homebrew/lib/libSDL3.dylib @executable_path/libSDL3.dylib chiaki-ngx.app/Contents/MacOS/libSDL2-2.0.0.dylib || true
-          install_name_tool -change /usr/local/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
+          install_name_tool -change $(brew --prefix)/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
           install_name_tool -change @rpath/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
           install_name_tool -change /opt/homebrew/lib/libSDL2-2.0.0.dylib @executable_path/libSDL2-2.0.0.dylib chiaki-ngx.app/Contents/MacOS/chiaki || true
           ln -s libvulkan.1.dylib chiaki-ngx.app/Contents/Frameworks/vulkan
@@ -64,11 +78,22 @@ jobs:
           rm -f chiaki-ngx.dmg
           hdiutil create -srcfolder chiaki-ngx.app chiaki-ngx.dmg
           codesign --force --entitlements gui/entitlements.xml --deep --sign - chiaki-ngx.dmg
+          cp chiaki-ngx.dmg chiaki-ngx-macos_arm64-Release.dmg
 
       - name: Upload chiaki-ngx Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: chiaki-ngx-macos_arm64-Release
-          path: chiaki-ngx.dmg
+          name: chiaki-ngx-macos_arm64-Release.dmg
+          path: chiaki-ngx-macos_arm64-Release.dmg
           if-no-files-found: error
           retention-days: 7
+
+      - name: Preserve macOS diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: diagnostics-macos
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/Testing/Temporary/*.log
+          if-no-files-found: ignore

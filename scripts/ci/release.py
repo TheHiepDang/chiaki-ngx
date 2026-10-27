@@ -81,7 +81,7 @@ def prepare(tag, target):
         command('git', '-C', str(ROOT), 'merge-base', '--is-ancestor', commit, 'origin/main')
         tag_object = git('rev-parse', 'refs/tags/' + tag)
         target = 'all'
-    elif event in ('workflow_dispatch', 'schedule', 'workflow_call'):
+    elif event in ('workflow_dispatch', 'schedule', 'workflow_call', 'pull_request'):
         if not tag:
             baseline = (ROOT / 'cmake/Version.txt').read_text().strip().split('-')[0]
             if baseline.count('.') == 1:

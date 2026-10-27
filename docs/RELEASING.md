@@ -71,7 +71,7 @@ git push origin refs/tags/v0.2.0
 Use `v0.2.0-rc.1` instead for a prerelease. Any valid prerelease suffix creates a GitHub
 prerelease and is not marked Latest. Stable tags use GitHub's version-based Latest policy.
 Tags must be `vMAJOR.MINOR.PATCH[-prerelease]`, without numeric leading zeroes or `+metadata`;
-each main numeric component must fit Windows' 0–65535 resource range. Both stable and RC
+each main numeric component must fit Windows' 0â€“65535 resource range. Both stable and RC
 commits must already be reachable from remote `main`.
 
 CI overlays `cmake/Version.txt` with the tag's version before configuring either platform.
@@ -82,6 +82,20 @@ version (including `-rc.1`); numeric Windows/installer version fields use MAJOR.
 The checked-in `0.1` remains the development baseline until changed normally in source.
 
 ## Manual validation and monitoring
+
+Unmerged pull requests automatically run **Validate Chiaki-ngx release packages** from
+`build-pr.yaml`, reusing the exact Windows/Linux release-asset jobs with `contents: read`.
+PRs compile the checked-out merge commit, use a `-ci.RUN_NUMBER` label and an empty tag object,
+and never call a publishing job. `pull_request_target` is not used. Main ancestry is required
+only for actual release tags. Optional macOS/ARM PR checks run in `build-pr-optional.yml`;
+require the Windows/Linux checks in branch protection, not the optional workflow's conclusion.
+
+The inherited PR setup's MINGW64 catalog no longer lists hidapi even though historical package
+downloads remain visible. CLANG64 is the production path, with its checksum-locked dependency
+closure. The shared FFmpeg script always fetches the pinned GitHub commit (no git.ffmpeg.org
+fallback). Optional macOS builds use a coherent Qt 6.9.3 SDK, including WebEngine, instead of
+mixing Homebrew Qt 6.12 and WebEngine 6.11.2. WebEngine remains required in that job.
+
 
 Authenticate your terminal with GitHub CLI normally. CI uses its own token.
 

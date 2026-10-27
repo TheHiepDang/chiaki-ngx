@@ -54,6 +54,30 @@ class ReleaseTests(unittest.TestCase):
                 release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
             gh.assert_not_called()
 
+    def test_unmerged_pr_validation_cannot_publish_or_require_main_ancestry(self):
+        (self.root / 'cmake').mkdir()
+        (self.root / 'cmake/Version.txt').write_text('0.1\n')
+        with patch.dict(os.environ, {**self.env, 'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': 'refs/pull/3/merge'}), \
+                patch.object(release, 'ROOT', self.root), patch.object(release, 'git', return_value=COMMIT) as git, \
+                patch.object(release, 'outputs') as output, patch.object(release, 'gh') as gh:
+            release.prepare('', 'all')
+            self.assertEqual(git.call_args_list[0].args, ('rev-parse', 'HEAD'))
+            self.assertEqual(git.call_count, 1)
+            self.assertEqual(output.call_args.args[0]['tag_object'], '')
+            self.assertEqual(output.call_args.args[0]['windows'], 'true')
+            self.assertEqual(output.call_args.args[0]['linux'], 'true')
+            with self.assertRaises(ValueError):
+                release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
+            gh.assert_not_called()
+
+    def test_branch_push_and_pull_request_target_cannot_enter_release_flow(self):
+        for event in ('push', 'pull_request_target'):
+            with patch.dict(os.environ, {**self.env, 'GITHUB_EVENT_NAME': event, 'GITHUB_REF': 'refs/heads/fix-ci', 'GITHUB_REF_NAME': 'fix-ci'}), \
+                    patch.object(release, 'git', return_value=COMMIT), patch.object(release, 'gh') as gh:
+                with self.assertRaises(ValueError): release.prepare('', 'all')
+                with self.assertRaises(ValueError): release.publish(self.root, TAG, COMMIT, TAG_OBJECT)
+                gh.assert_not_called()
+
     def test_tag_identity_and_main_ancestry_with_real_git(self):
         repository = self.root / 'git-fixture'
         repository.mkdir()
