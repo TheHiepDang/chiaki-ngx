@@ -43,3 +43,6 @@ target_compile_definitions(update-ui-test PRIVATE UPDATE_QML_PATH="${CMAKE_CURRE
 target_link_libraries(update-ui-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test)
 add_test(NAME update-ui COMMAND update-ui-test)
 set_tests_properties(update-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Material;QT_FORCE_STDERR_LOGGING=1")
+
+# Fail stalled focused checks explicitly instead of exhausting a release build job.
+set_tests_properties(enhancement-diagnostics update-checker PROPERTIES TIMEOUT 120)

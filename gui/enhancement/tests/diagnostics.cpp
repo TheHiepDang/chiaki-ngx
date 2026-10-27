@@ -9,12 +9,13 @@
 #include <QTemporaryDir>
 #include <QProcess>
 #include <QDebug>
+#include <cstdio>
 #include <thread>
 #include <vector>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
-#define CHECK(x) do { if (!(x)) { qCritical() << "FAIL" << __LINE__ << #x; DiagnosticLog::shutdown(); return 1; } } while (0)
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "[Test][Diagnostics] FAIL %d %s\n", __LINE__, #x); qCritical() << "FAIL" << __LINE__ << #x; DiagnosticLog::shutdown(); return 1; } } while (0)
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
 #ifdef Q_OS_WIN
@@ -33,6 +34,7 @@ int main(int argc, char **argv) {
         return 3;
     }
 #endif
+    std::fprintf(stderr, "[Test][Diagnostics] logging/redaction checks\n");
     QTemporaryDir temporary;
     CHECK(temporary.isValid());
     CHECK(DiagnosticLog::initialize(temporary.path()));
@@ -46,9 +48,9 @@ int main(int argc, char **argv) {
     CHECK(worker.append("[RTX][NR] frag").isEmpty());
     const auto fragments = worker.append("ment\nplain worker line\n");
     CHECK(fragments.size() == 2 && fragments[0] == "[RTX][NR] fragment" && fragments[1] == "[RTX][Worker] plain worker line");
-    const auto utf8 = QString::fromUtf8("[RTX][NR] caf�\n").toUtf8();
+    const auto utf8 = QString::fromUtf8("[RTX][NR] cafÃ©\n").toUtf8();
     CHECK(worker.append(utf8.left(utf8.size()-2)).isEmpty());
-    CHECK(worker.append(utf8.right(2)) == QStringList{QString::fromUtf8("[RTX][NR] caf�")});
+    CHECK(worker.append(utf8.right(2)) == QStringList{QString::fromUtf8("[RTX][NR] cafÃ©")});
     CHECK(worker.append("access_token=worker-secret").isEmpty());
     for (const auto &line : worker.append(" Bearer worker-bearer\n")) DiagnosticLog::record(QtWarningMsg,line);
     CHECK(worker.append("last fragment").isEmpty());
@@ -61,6 +63,7 @@ int main(int argc, char **argv) {
     const auto jsonSecrets = DiagnosticLog::sanitize(R"({"access_token":"json-secret", "refresh_token":"refresh-secret", "registkey":"private-key"})");
     CHECK(!jsonSecrets.contains("json-secret") && !jsonSecrets.contains("refresh-secret") && !jsonSecrets.contains("private-key"));
     CHECK(!DiagnosticLog::sanitize("Authorization: Basic private-basic").contains("private-basic"));
+    std::fprintf(stderr, "[Test][Diagnostics] concurrent writes\n");
     std::vector<std::thread> writers;
     for (int n=0;n<4;++n) writers.emplace_back([n] { for (int i=0;i<30;++i) DiagnosticLog::record(QtInfoMsg, QString("[thread] %1 %2").arg(n).arg(i)); });
     for (auto &thread : writers) thread.join();
@@ -72,10 +75,12 @@ int main(int argc, char **argv) {
     CHECK(!contents.contains("worker-secret") && !contents.contains("worker-bearer"));
     CHECK(contents.contains("loader_*.jsonl") && contents.contains("[RTX]"));
     CHECK(!contents.contains("secret-token") && !contents.contains("bearer-secret") && !contents.contains("192.168.1.25") && !contents.contains("9876") && !contents.contains("private-id"));
+    std::fprintf(stderr, "[Test][Diagnostics] bounded log rotation\n");
     for(int n=0;n<1100;++n) DiagnosticLog::record(QtInfoMsg, QString(6000,'x'));
     CHECK(QFileInfo(path).size() <= 4*1024*1024+2000);
     CHECK(QFileInfo::exists(path+".previous.log"));
 #ifdef Q_OS_WIN
+    std::fprintf(stderr, "[Test][Diagnostics] controlled GUI crash/report/dump\n");
     const QString crashes = temporary.path()+"/child";
     QProcess child;child.setProgram(QCoreApplication::applicationFilePath());child.setArguments({"--crash-child",crashes});child.start();
     CHECK(child.waitForFinished(15000));CHECK(child.exitCode()!=0);
@@ -85,6 +90,7 @@ int main(int argc, char **argv) {
     const auto crash=report.readAll();
     CHECK(crash.contains("[App][Crash]") && crash.contains("e0424348") && crash.contains("Report a bug:") && crash.contains("Native minidump saved"));
     const auto dumps=folder.entryList({"*-crash.dmp"},QDir::Files);CHECK(dumps.size()==1 && QFileInfo(folder.filePath(dumps[0])).size()>0);
+    std::fprintf(stderr, "[Test][Diagnostics] controlled worker crash/report/dump\n");
     const QString workerCrashDir = temporary.path()+"/worker-child";
     QProcess workerChild; workerChild.setProgram(QCoreApplication::applicationFilePath());
     workerChild.setArguments({"--worker-crash-child",workerCrashDir}); workerChild.start();

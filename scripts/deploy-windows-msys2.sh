@@ -16,7 +16,7 @@ qml_dir="$5"
 mkdir -p "$output_dir"
 cp "$exe_path" "$output_dir/"
 
-export PATH="${tool_dir}:${msys_prefix}/share/qt6/bin:${PATH}"
+export PATH="${output_dir}:${tool_dir}:${msys_prefix}/share/qt6/bin:${PATH}"
 export QT_PLUGIN_PATH="${msys_prefix}/share/qt6/plugins"
 export QML2_IMPORT_PATH="${msys_prefix}/share/qt6/qml"
 
@@ -50,7 +50,12 @@ extract_dependencies() {
             echo "ldd exited with status $ldd_status for $binary" >&2
         fi
     else
-        ldd_output="$(ldd "$binary" 2>&1)" || true
+        ldd_output="$(ldd "$binary" 2>&1)" || ldd_status=$?
+    fi
+
+    if [[ $ldd_status -ne 0 ]] || [[ "$ldd_output" == *"not found"* ]]; then
+        printf 'Dependency scan failed for %s:\n%s\n' "$binary" "$ldd_output" >&2
+        return 1
     fi
 
     printf '%s\n' "$ldd_output" | awk '
@@ -77,6 +82,7 @@ enqueue_dependency() {
     fi
 }
 
+resolve_queue() {
 while [[ ${#queue[@]} -gt 0 ]]; do
     current="${queue[0]}"
     queue=("${queue[@]:1}")
@@ -86,10 +92,13 @@ while [[ ${#queue[@]} -gt 0 ]]; do
     fi
     scanned_paths["$current"]=1
 
+    dependencies=$(extract_dependencies "$current")
     while IFS= read -r dependency; do
         enqueue_dependency "$dependency"
-    done < <(extract_dependencies "$current")
+    done <<< "$dependencies"
 done
+}
+resolve_queue
 
 # Ensure SDL3 is bundled even if ldd/Qt doesn't list it.
 shopt -s nullglob
@@ -103,7 +112,20 @@ for dll_dir in "$msys_prefix/bin" "/clangarm64/bin" "$msys_prefix/mingw64/bin"; 
 done
 shopt -u nullglob
 
-windeployqt6.exe --no-translations --qmldir="$qml_dir" "$output_dir/$(basename "$exe_path")"
+windeployqt6.exe --release --no-translations --qmldir="$qml_dir" "$output_dir/$(basename "$exe_path")"
+# windeployqt only selects qwindows by default; packaged headless verification needs offscreen.
+mkdir -p "$output_dir/platforms"
+cp "$msys_prefix/share/qt6/plugins/platforms/qoffscreen.dll" "$output_dir/platforms/"
+cat > "$output_dir/qt.conf" <<'CONF'
+[Paths]
+Prefix=.
+Plugins=.
+QmlImports=qml
+Qml2Imports=qml
+LibraryExecutables=.
+CONF
+while IFS= read -r -d '' plugin; do queue+=("$plugin"); done < <(find "$output_dir" -type f \( -iname '*.dll' -o -iname '*.exe' \) -print0)
+resolve_queue
 
 # Remove system-provided DLLs that Windows already supplies and
 # should not be bundled with the MSYS2 build (e.g. D3D compiler). Use

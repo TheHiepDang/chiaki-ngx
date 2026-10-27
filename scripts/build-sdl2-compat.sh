@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -xe
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 	  
 cd $(dirname "${BASH_SOURCE[0]}")/..
 cd "./$1"
@@ -14,7 +15,11 @@ FILE=SDL3-${SDL_VER}.tar.gz
 DIR=SDL3-${SDL_VER}
 
 if [ ! -d "$DIR" ]; then
-	curl -L "$URL" -O
+	if [[ ${CHIAKI_RELEASE_LOCKED:-0} == 1 ]]; then
+		python3 "$SCRIPT_DIR/ci/release.py" download --group sdl3 --folder "$FILE"
+	else
+		curl -fL "$URL" -O
+	fi
 	tar -xf "$FILE"
 fi
 
@@ -55,7 +60,11 @@ FILE=sdl2-compat-${SDL_COMPAT_VER}.tar.gz
 DIR2=sdl2-compat-${SDL_COMPAT_VER}
 
 if [ ! -d "$DIR2" ]; then
-	curl -L "$URL" -O
+	if [[ ${CHIAKI_RELEASE_LOCKED:-0} == 1 ]]; then
+		python3 "$SCRIPT_DIR/ci/release.py" download --group sdl-compat --folder "$FILE"
+	else
+		curl -fL "$URL" -O
+	fi
 	tar -xf "$FILE"
 fi
 

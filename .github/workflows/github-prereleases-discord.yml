@@ -5,6 +5,8 @@ on:
 
 jobs:
   github-releases-to-discord:
+    # Upstream's webhook notifications are disabled in this fork.
+    if: github.repository == 'chiaki-ng/chiaki-ng'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

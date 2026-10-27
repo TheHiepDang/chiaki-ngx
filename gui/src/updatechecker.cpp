@@ -46,7 +46,7 @@ UpdateChecker::UpdateChecker(QObject *parent,QNetworkAccessManager *network,bool
                 if(result.value("version").toString()!=candidate_.version.text) {installerPoll_.stop();fail(tr("Update helper returned a different version."));return;}
                 installerPoll_.stop();
                 if(!installAllowed_) {fail(tr("A stream started; update canceled."));return;}
-                status_=tr("Restarting to install v%1…").arg(candidate_.version.text);emit changed();
+                status_=tr("Restarting to install v%1â€¦").arg(candidate_.version.text);emit changed();
                 qInfo()<<"[Update] installer_ready=true restarting_for_version="<<candidate_.version.text;
                 emit restartReady();
                 QCoreApplication::quit();
@@ -61,8 +61,11 @@ UpdateChecker::UpdateChecker(QObject *parent,QNetworkAccessManager *network,bool
         QTimer::singleShot(1500,this,&UpdateChecker::checkForUpdates);
 }
 bool UpdateChecker::canInstall() const {
+    return supportsInstallation() && available() && candidate_.installable();
+}
+bool UpdateChecker::supportsInstallation() const {
 #if defined(Q_OS_WIN) && defined(Q_PROCESSOR_X86_64)
-    return available() && candidate_.installable();
+    return true;
 #else
     return false;
 #endif
@@ -94,7 +97,7 @@ void UpdateChecker::fail(const QString &message) {
 }
 void UpdateChecker::checkForUpdates() {
     if(installing()) return;
-    cancelRequest();candidate_={};releases_={};phase_=Checking;error_=false;status_=tr("Checking for updates…");emit changed();
+    cancelRequest();candidate_={};releases_={};phase_=Checking;error_=false;status_=tr("Checking for updatesâ€¦");emit changed();
     if(!version_.valid) {fail(tr("This build has no valid release version."));return;}
     requestPage(1,generation_);
 }
@@ -124,7 +127,7 @@ void UpdateChecker::requestPage(int page,quint64 generation) {
             requestPage(page+1,generation);return;
         }
         candidate_=NgxRelease::newest(releases_,channel_=="prerelease");phase_=Idle;
-        status_=available()?tr("v%1 is available").arg(candidate_.version.text):tr("You’re up to date");
+        status_=available()?tr("v%1 is available").arg(candidate_.version.text):tr("Youâ€™re up to date");
         if(available() && !candidate_.installable()) status_=tr("v%1 is available; view its release page").arg(candidate_.version.text);
         qInfo()<<"[Update] check_complete channel="<<channel_<<"current="<<version_.text<<"latest="<<candidate_.version.text<<"available="<<available()<<"verified_windows_asset="<<candidate_.installable();
         emit changed();
@@ -142,7 +145,7 @@ void UpdateChecker::installUpdate() {
     error_=false;archive_=cacheDirectory_+"/package.zip";file_=std::make_unique<QSaveFile>(archive_);
     if(!file_->open(QIODevice::WriteOnly)) {fail(tr("Could not save the update."));return;}
     hash_=std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);received_=0;progress_=0;phase_=Downloading;
-    status_=tr("Downloading v%1…").arg(candidate_.version.text);emit changed();
+    status_=tr("Downloading v%1â€¦").arg(candidate_.version.text);emit changed();
     const auto generation=generation_;reply_=network_->get(updateRequest(candidate_.download));auto reply=reply_;reply->setReadBufferSize(256*1024);
     qInfo()<<"[Update] download_started version="<<candidate_.version.text<<"expected_bytes="<<candidate_.size;
     connect(reply,&QNetworkReply::readyRead,this,[this,reply,generation]{if(generation==generation_ && reply_==reply) drainDownload();});
@@ -181,7 +184,7 @@ void UpdateChecker::prepareInstaller() {
         "-ExpectedSha256",candidate_.sha256,"-StatePath",QDir::toNativeSeparators(stateFile_),"-LogPath",QDir::toNativeSeparators(log)});
     process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *a){a->flags|=CREATE_NO_WINDOW;});
     if(!process.startDetached()) {fail(tr("Could not start the update helper."));return;}
-    phase_=Preparing;status_=tr("Preparing update…");progress_=1;pollCount_=0;installerPoll_.start();
+    phase_=Preparing;status_=tr("Preparing updateâ€¦");progress_=1;pollCount_=0;installerPoll_.start();
     qInfo()<<"[Update] preparing_version="<<candidate_.version.text<<"installer_log="<<log;emit changed();
 #else
     fail(tr("Automatic installation is available for Windows portable builds."));

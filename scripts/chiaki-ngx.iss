@@ -6,7 +6,8 @@
 #define MyAppURL "https://github.com/TheHiepDang/chiaki-ngx"
 #define MyAppExeName "chiaki.exe"
 #define MyAppPath "..\chiaki-ngx-Win"
-#define MyAppVersion() \
+#define MyAppVersion GetStringFileInfo(MyAppPath + "\" + MyAppExeName, "ProductVersion")
+#define MyNumericVersion() \
   GetVersionComponents(MyAppPath + "\" + MyAppExeName, Local[0], Local[1], Local[2], Local[3]), \
   Str(Local[0]) + "." + Str(Local[1]) + "." + Str(Local[2])
 
@@ -16,6 +17,7 @@
 AppId={{752E6234-41A9-4317-A9C8-E93EA77932CF}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoVersion={#MyNumericVersion()}
 ;AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
