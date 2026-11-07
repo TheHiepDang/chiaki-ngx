@@ -13,6 +13,7 @@
 #include <QEventLoop>
 #include <QtTest/QTest>
 #include <QSignalSpy>
+#include <QWheelEvent>
 
 class NrSettingsMap : public QQmlPropertyMap
 {
@@ -316,7 +317,7 @@ int main(int argc, char **argv)
         CHECK(child->property("text").toString() != "Reset these four controls");
     auto background = live->findChild<QObject *>("rendererDialogBackground");
     CHECK(background);
-    CHECK(qAbs(background->property("color").value<QColor>().alphaF() - 0.5) < 0.01);
+    CHECK(qAbs(background->property("color").value<QColor>().alphaF() - 0.88) < 0.01);
     backend.settings()->insert("placeboColorAdjustmentEnabled", false);
     app.processEvents();
     CHECK(!contrast->property("enabled").toBool());
@@ -332,19 +333,19 @@ int main(int argc, char **argv)
     CHECK(scale->property("enabled").toBool());
     const QString previewRoot = qEnvironmentVariable("CHIAKI_QML_PREVIEW_ROOT");
     QQuickWindow window;
-    window.resize(540, 1080);
+    window.resize(1280, 720);
     window.setColor(QColor("#406080"));
     auto item = qobject_cast<QQuickItem *>(live.get());
     CHECK(item);
     QQmlComponent wrapperComponent(&engine);
-    wrapperComponent.setData("import QtQuick.Controls; Pane { font.pixelSize: 20; padding: 0; background: null }", QUrl());
+    wrapperComponent.setData("import QtQuick.Controls; import QtQuick.Controls.Material; Pane { Material.theme: Material.Dark; Material.accent: \"#00a7ff\"; font.pixelSize: 20; padding: 0; background: null }", QUrl());
     std::unique_ptr<QObject> wrapper(wrapperComponent.create());
     auto wrapperItem = qobject_cast<QQuickItem *>(wrapper.get());
     CHECK(wrapperItem);
     wrapperItem->setParentItem(window.contentItem());
-    wrapperItem->setSize(QSizeF(540, 1080));
+    wrapperItem->setSize(QSizeF(1280, 720));
     item->setParentItem(qvariant_cast<QQuickItem *>(wrapper->property("contentItem")));
-    item->setWidth(540);
+    item->setWidth(1280);
     auto fitDialog = [&]() { item->setHeight(qMin(qreal(window.height()), item->implicitHeight())); };
     QObject::connect(item, &QQuickItem::implicitHeightChanged, &window, fitDialog);
     QObject::connect(&window, &QQuickWindow::heightChanged, &window, fitDialog);
@@ -375,13 +376,25 @@ int main(int argc, char **argv)
     auto rendererTab = live->findChild<QQuickItem *>("rendererTab");
     auto eyeTab = live->findChild<QQuickItem *>("eyeCandyTab");
     CHECK(rendererTab && eyeTab && rendererTab->hasActiveFocus());
-    // Both tabs grow to their content, while a short window bounds the dialog and scrolls.
+    // Both tabs stay shallow and scroll horizontally, including on narrow windows.
     auto rendererView = live->findChild<QQuickItem *>("rendererSettingsView");
     auto eyeView = live->findChild<QQuickItem *>("eyeCandySettingsView");
     CHECK(rendererView && eyeView);
     QTest::qWait(30);
     const qreal rendererHeight = item->height();
-    CHECK(rendererHeight > 200 && rendererHeight < 1080);
+    CHECK(rendererHeight <= 176);
+    CHECK(rendererView->property("horizontalBar").toBool());
+    auto rendererFlickable = rendererView->property("contentItem").value<QQuickItem *>();
+    CHECK(rendererFlickable);
+    rendererFlickable->setProperty("contentX", 0);
+    QWheelEvent wheel(QPointF(80, 140), window.mapToGlobal(QPoint(80, 140)),
+        QPoint(), QPoint(0, -120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QGuiApplication::sendEvent(&window, &wheel);
+    app.processEvents();
+    CHECK(rendererFlickable->property("contentX").toDouble() > 0);
+    rendererFlickable->setProperty("contentX", 0);
+    CHECK(eyeView->property("horizontalBar").toBool());
+    CHECK(rendererView->property("contentWidth").toDouble() > rendererView->width());
     CHECK(rendererView->property("contentHeight").toDouble() <= rendererView->height() + 1);
     for (const char *name : {"rendererDimensions", "rendererStatus", "rendererActive"}) {
         auto footer = live->findChild<QQuickItem *>(name);
@@ -389,22 +402,25 @@ int main(int argc, char **argv)
     }
     tabs->setProperty("currentIndex", 1);
     QTest::qWait(30);
-    CHECK(item->height() > 200 && item->height() < 1080);
+    CHECK(item->height() <= 176);
+    CHECK(qAbs(item->height() - rendererHeight) <= 1);
     CHECK(qAbs(item->height() - item->implicitHeight()) <= 1);
     CHECK(eyeView->property("contentHeight").toDouble() <= eyeView->height() + 1);
     window.resize(540, 250);
-    wrapperItem->setHeight(250);
+    wrapperItem->setSize(QSizeF(540, 250));
+    item->setWidth(540);
     QTest::qWait(30);
     CHECK(item->height() <= 250);
-    CHECK(eyeView->property("contentHeight").toDouble() > eyeView->height());
+    CHECK(eyeView->property("contentWidth").toDouble() > eyeView->width());
     auto lastReset = live->findChild<QQuickItem *>("resetEyeCandyDarkArea");
     CHECK(lastReset);
     lastReset->forceActiveFocus(Qt::TabFocusReason);
     QTest::qWait(30);
     const auto lastPosition = lastReset->mapToItem(item, QPointF(0, 0));
     CHECK(lastPosition.y() >= 0 && lastPosition.y() + lastReset->height() <= item->height() + 1);
-    window.resize(540, 1080);
-    wrapperItem->setHeight(1080);
+    CHECK(lastPosition.x() >= 0 && lastPosition.x() + lastReset->width() <= item->width() + 1);
+    window.resize(1280, 720);
+    wrapperItem->setSize(QSizeF(1280, 720)); item->setWidth(1280);
     tabs->setProperty("currentIndex", 0);
     CHECK(QMetaObject::invokeMethod(live.get(), "focusInitialItem"));
     QTest::qWait(30);
@@ -476,9 +492,9 @@ int main(int argc, char **argv)
         CHECK(backend.settings()->value("enhancementIntensity").toDouble()==1);
         rendererTab->forceActiveFocus(Qt::TabFocusReason);
         CHECK(capture("renderer-three-passes"));
-        window.resize(540, 720); wrapperItem->setHeight(720);
-        CHECK(capture("renderer-three-passes-720"));
-        CHECK(item->height() <= 720);
+        window.resize(960, 540); wrapperItem->setSize(QSizeF(960, 540)); item->setWidth(960);
+        CHECK(capture("renderer-three-passes-540"));
+        CHECK(item->height() <= 176);
         auto sharpReset = live->findChild<QQuickItem *>("resetNrSharpness");
         CHECK(sharpReset);
         sharpReset->forceActiveFocus(Qt::TabFocusReason);
@@ -487,9 +503,12 @@ int main(int argc, char **argv)
         CHECK(resetPosition.y() >= 0 && resetPosition.y() + sharpReset->height() <= item->height() + 1);
         auto liveFsr = live->findChild<QQuickItem *>("fsrToggle");
         CHECK(liveFsr);
-        const auto fsrPosition = liveFsr->mapToItem(item, QPointF(0, 0));
-        CHECK(fsrPosition.x() >= 0 && fsrPosition.x() + liveFsr->width() <= item->width() + 1);
-        window.resize(540, 1080); wrapperItem->setHeight(1080);
+        // Focusing a neighboring control must bring that control into the viewport too.
+        liveFsr->forceActiveFocus(Qt::TabFocusReason);
+        QTest::qWait(30);
+        const auto visibleFsrPosition = liveFsr->mapToItem(item, QPointF(0, 0));
+        CHECK(visibleFsrPosition.x() >= 0 && visibleFsrPosition.x() + liveFsr->width() <= item->width() + 1);
+        window.resize(1280, 720); wrapperItem->setSize(QSizeF(1280, 720)); item->setWidth(1280);
         app.processEvents();
         auto livePassSelector = live->findChild<QQuickItem *>("nrEditingPass");
         CHECK(livePassSelector && livePassSelector->isVisible());
@@ -503,13 +522,15 @@ int main(int argc, char **argv)
         CHECK(backend.settings()->value("enhancementEditingPass").toInt() == 2);
         rendererTab->forceActiveFocus(Qt::TabFocusReason);
         QTest::keyClick(&window, Qt::Key_PageDown);
+        tabs->setProperty("currentIndex", 1);
+        eyeTab->forceActiveFocus(Qt::TabFocusReason);
         CHECK(capture("eye-candy"));
         backend.window()->insert("enhancementApplying", true);
         CHECK(capture("applying"));
     }
     item->setParentItem(nullptr);
     wrapperItem->setParentItem(nullptr);
-    qInfo() << "PASS: QML and focus navigation; Tab/Shift+Tab; L1/R1 key mapping; D-pad/confirm; resets; 50% backdrop";
+    qInfo() << "PASS: QML and focus navigation; Tab/Shift+Tab; L1/R1 key mapping; D-pad/confirm; resets; shallow horizontal bar";
     return 0;
 }
 #include "qml.moc"

@@ -19,7 +19,7 @@ target_compile_features(enhancement-model-test PRIVATE cxx_std_11)
 enable_testing()
 add_test(NAME enhancement-model COMMAND enhancement-model-test)
 add_test(NAME enhancement-qml COMMAND enhancement-qml-test)
-set_tests_properties(enhancement-qml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1")
+set_tests_properties(enhancement-qml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Material;QT_FORCE_STDERR_LOGGING=1")
 
 add_executable(enhancement-diagnostics-test diagnostics.cpp ../diagnostics.cpp ../diagnostics.h)
 target_compile_features(enhancement-diagnostics-test PRIVATE cxx_std_17)
