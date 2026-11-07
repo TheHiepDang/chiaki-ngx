@@ -319,7 +319,7 @@ struct Gpu
         check(device->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&descriptors)),
               "CreateDescriptorHeap");
         descriptorSize = device->GetDescriptorHandleIncrementSize(hd.Type);
-        for (const char *entry : {"scaleMain", "grayMain", "zeroMain", "motionMain", "residualMain",
+        for (const char *entry : {"scaleMain", "grayMain", "zeroMain", "motionMain", "residualMain", "hdrProxyMain", "hdrResidualMain", "hdrPatternMain",
                                   "easuMain", "rcasMain"})
         {
             const char *source =
@@ -537,11 +537,12 @@ struct Gpu
         uint8_t *data = nullptr;
         D3D12_RANGE range{0, static_cast<SIZE_T>(total)};
         check(read->Map(0, &range, reinterpret_cast<void **>(&data)), "Map readback");
-        std::vector<uint8_t> result(static_cast<size_t>(t.width) * t.height * 4);
+        const unsigned bytesPerPixel = t.format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+        std::vector<uint8_t> result(static_cast<size_t>(t.width) * t.height * bytesPerPixel);
         for (unsigned y = 0; y < t.height; ++y)
-            std::memcpy(result.data() + static_cast<size_t>(y) * t.width * 4,
+            std::memcpy(result.data() + static_cast<size_t>(y) * t.width * bytesPerPixel,
                         data + layout.Offset + static_cast<size_t>(y) * layout.Footprint.RowPitch,
-                        t.width * 4);
+                        t.width * bytesPerPixel);
         D3D12_RANGE empty{0, 0};
         read->Unmap(0, &empty);
         return result;
@@ -779,7 +780,7 @@ struct NrStage
     std::shared_ptr<NgxFeature> feature;
     NrPassConfig appliedSettings;
     bool settingsApplied = false;
-    Texture reduced, edited, motion, depth, upInput, upOutput, composite;
+    Texture reduced, edited, motion, depth, upInput, upOutput, composite, proxy, sharpened;
 };
 struct Worker
 {
@@ -796,7 +797,7 @@ struct Worker
     }
     std::unique_ptr<OpticalFlow> optical;
     HMODULE proxy = nullptr;
-    Texture fullMotion, fullDepth, fgReal, thumbnail;
+    Texture fullMotion, fullDepth, fgReal, thumbnail, opticalProxy;
     std::vector<uint8_t> previousThumbnail, previousRealPixels;
     Command config{};
     fs::path runtimeDir;
@@ -837,19 +838,24 @@ struct Worker
         config = c;
         runtimeDir = dir;
         gpu.reset(new Gpu(c.adapterLuid));
+        const bool hdr = (c.flags & HdrLinear) != 0;
+        const auto colorFormat = hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+        std::fprintf(stderr, "[RTX][HDR] enabled=%u shared_format=%s model_input=sRGB reference_white_nits=203\n",
+            unsigned(hdr), hdr ? "RGBA16F linear BT.2020" : "RGBA8 sRGB");
         Reply reply;
         reply.result = Result::Ready;
         reply.revision = c.revision;
         for (unsigned i = 0; i < SlotCount; ++i)
         {
             auto &s = resources[i];
-            s.input = gpu->texture(c.width, c.height, DXGI_FORMAT_R8G8B8A8_UNORM, true);
-            s.real = gpu->texture(c.width, c.height, DXGI_FORMAT_R8G8B8A8_UNORM, true);
-            s.generated = gpu->texture(c.width, c.height, DXGI_FORMAT_R8G8B8A8_UNORM, true);
+            s.input = gpu->texture(c.width, c.height, colorFormat, true);
+            s.real = gpu->texture(c.width, c.height, colorFormat, true);
+            s.generated = gpu->texture(c.width, c.height, colorFormat, true);
             check(gpu->device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&s.fence)),
                   "Create shared fence");
         }
         thumbnail = gpu->texture(64, 36);
+        if (hdr) opticalProxy = gpu->texture(c.width, c.height);
         auto extent = nrExtent(c.width, c.height, c.percent);
         reply.width = extent.width;
         reply.height = extent.height;
@@ -879,7 +885,11 @@ struct Worker
                     stage.depth = gpu->texture(size.width, size.height, DXGI_FORMAT_R32_FLOAT);
                     stage.upInput = gpu->texture(c.width, c.height);
                     stage.upOutput = gpu->texture(c.width, c.height);
-                    stage.composite = gpu->texture(c.width, c.height);
+                    stage.composite = gpu->texture(c.width, c.height, colorFormat);
+                    if (hdr) {
+                        stage.proxy = gpu->texture(c.width, c.height);
+                        stage.sharpened = gpu->texture(c.width, c.height);
+                    }
                     std::fprintf(stderr, "[RTX][NR][Pass%u] created %ux%u percent=%u fsr=%u sharpness=%u\n",
                         creatingPass + 1, size.width, size.height, settings.percent, settings.fsr, settings.sharpness);
                 }
@@ -891,7 +901,11 @@ struct Worker
                 std::fprintf(stderr, "[RTX][NR] chain disabled: %s\n", nrError.c_str());
             }
         }
-        if (c.flags & FrameGeneration)
+        if ((c.flags & FrameGeneration) && hdr) {
+            fgError = "HDR frame generation is not enabled; HDR NR remains available";
+            std::fprintf(stderr, "[RTX][FG] %s\n", fgError.c_str());
+        }
+        if ((c.flags & FrameGeneration) && !hdr)
         {
             try
             {
@@ -1009,11 +1023,19 @@ struct Worker
         QueryPerformanceCounter(&begin);
         check(gpu->queue->Wait(s.fence.Get(), c.fenceValue), "Wait for Vulkan producer");
         gpu->wait();
+        const bool hdr = (c.flags & HdrLinear) != 0;
+        Texture *flowInput = &s.input;
+        if (hdr && optical) {
+            gpu->begin();
+            gpu->run("hdrProxyMain", &s.input, opticalProxy);
+            gpu->submit();
+            flowInput = &opticalProxy;
+        }
         bool reset = (c.flags & Reset) || !history;
         if (optical)
         {
             gpu->begin();
-            gpu->run("scaleMain", &s.input, thumbnail);
+            gpu->run("scaleMain", flowInput, thumbnail);
             gpu->submit();
             auto sample = gpu->pixels(thumbnail);
             if (!reset && sample.size() == previousThumbnail.size())
@@ -1041,7 +1063,7 @@ struct Worker
         {
             if (!history)
                 std::fprintf(stderr, "[RTX][Worker] first optical-flow dispatch\n");
-            optical->execute(*gpu, s.input, reset);
+            optical->execute(*gpu, *flowInput, reset);
             if (!history)
                 std::fprintf(stderr, "[RTX][Worker] optical-flow completed\n");
         }
@@ -1064,7 +1086,12 @@ struct Worker
                 auto &composite = stage.composite;
                 const auto settings = passConfig(c, pass);
                 Texture *passInput = processed;
-                gpu->run("scaleMain", passInput, reduced);
+                Texture *modelInput = passInput;
+                if (hdr) {
+                    gpu->run("hdrProxyMain", passInput, stage.proxy);
+                    modelInput = &stage.proxy;
+                }
+                gpu->run("scaleMain", modelInput, reduced);
                 gpu->run("motionMain", nullptr, motion, nullptr, nullptr, &optical->vectors, 0,
                          float(reduced.width) / c.width, float(reduced.height) / c.height);
                 gpu->run("zeroMain", nullptr, depth);
@@ -1122,18 +1149,32 @@ struct Worker
                 {
                     gpu->run(scaler, &reduced, upInput);
                     gpu->run(scaler, &edited, upOutput);
-                    gpu->run("residualMain", passInput, composite, &upOutput, &upInput);
-                    processed = &composite;
+                    if (!hdr) {
+                        gpu->run("residualMain", passInput, composite, &upOutput, &upInput);
+                        processed = &composite;
+                    }
                     if (fsr)
                         active |= Fsr;
                 }
                 else
                     processed = &edited;
-                if (fsr && settings.sharpness)
+                if (!hdr && fsr && settings.sharpness)
                 {
                     gpu->run("rcasMain", processed, upOutput, nullptr, nullptr, nullptr,
                              settings.sharpness / 100.0f);
                     processed = &upOutput;
+                }
+                if (hdr) {
+                    // Always restore into this pass's HDR input, including at 100% resolution.
+                    Texture *modelOutput = upscale ? &upOutput : &edited;
+                    Texture *baseline = upscale ? &upInput : &reduced;
+                    if (fsr && settings.sharpness) {
+                        gpu->run("rcasMain", modelOutput, stage.sharpened, nullptr, nullptr, nullptr,
+                            settings.sharpness / 100.0f);
+                        modelOutput = &stage.sharpened;
+                    }
+                    gpu->run("hdrResidualMain", passInput, composite, modelOutput, baseline);
+                    processed = &composite;
                 }
                 gpu->mark(pass * 4 + 3);
             }
@@ -1285,6 +1326,7 @@ struct Worker
         std::string msg = hasNr() ? "NR active (" + std::to_string(c.nrPassCount) + (c.nrPassCount == 1 ? " pass)" : " passes)") : "NR off";
         if (!nrError.empty())
             msg = "NR unavailable: " + nrError;
+        if (hdr) msg += "; HDR preserved (SDR model reference)";
         msg += active & Fsr ? "; FSR active" : "; FSR off";
         msg += active & FrameGeneration ? "; FG output verified"
                : fg                     ? "; FG awaiting output/route verification"
@@ -1392,9 +1434,34 @@ int wmain(int argc, wchar_t **argv)
             for (size_t i = 0; i < a.size(); ++i)
                 if (i % 4 != 3 && a[i] != b[i])
                     throw std::runtime_error("Identity residual changed pixels");
+            auto hdr = gpu.texture(64, 64, DXGI_FORMAT_R16G16B16A16_FLOAT);
+            auto restored = gpu.texture(64, 64, DXGI_FORMAT_R16G16B16A16_FLOAT);
+            auto proxy = gpu.texture(64, 64);
+            gpu.begin();
+            gpu.run("hdrPatternMain", nullptr, hdr);
+            gpu.run("hdrProxyMain", &hdr, proxy);
+            gpu.run("hdrResidualMain", &hdr, restored, &proxy, &proxy);
+            gpu.submit();
+            if (gpu.pixels(hdr) != gpu.pixels(restored))
+                throw std::runtime_error("HDR neutral composition changed highlights/gamut/black/alpha");
+            // Exercise a non-neutral, bounded edit and retain high luminance.
+            gpu.begin();
+            gpu.run("zeroMain", nullptr, out);
+            gpu.run("hdrResidualMain", &hdr, restored, &out, &proxy);
+            gpu.submit();
+            auto edited = gpu.pixels(restored);
+            bool retainedHighlight = false;
+            for (size_t n = 0; n < edited.size(); n += 2) {
+                uint16_t value = 0;
+                std::memcpy(&value, edited.data() + n, sizeof value);
+                if ((value & 0x7c00) == 0x7c00)
+                    throw std::runtime_error("HDR composition produced NaN/infinity");
+                if (!(value & 0x8000) && value > 0x4900) retainedHighlight = true; // >10 in FP16
+            }
+            if (!retainedHighlight) throw std::runtime_error("HDR edit clipped highlights to SDR");
             std::fprintf(
                 stderr,
-                "[RTX][SelfTest] PASS: D3D12 shader compilation, dispatch, readback and identity residual\n");
+                "[RTX][SelfTest] PASS: D3D12 shaders; SDR identity; HDR neutral identity, wide gamut, highlights and bounded edits\n");
             return 0;
         }
         std::unique_ptr<Worker> worker;

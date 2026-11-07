@@ -83,7 +83,7 @@ ScrollView {
             Layout.margins: view.compact ? 4 : 16
             wrapMode: Text.WordWrap
             visible: !view.compact
-            text: qsTr("Experimental Windows enhancements · SDR output")
+            text: qsTr("Experimental Windows enhancements · SDR and HDR NR")
         }
         GridLayout {
             Layout.alignment: view.horizontalBar ? Qt.AlignLeft | Qt.AlignTop : Qt.AlignHCenter

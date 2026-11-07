@@ -52,6 +52,9 @@ int main()
     c.flags = 0x8000;
     CHECK(!valid(c));
     c.flags = Neural | Fsr;
+    c.flags |= HdrLinear;
+    CHECK(valid(c));
+    c.flags &= ~HdrLinear;
     c.nrPassCount = 3;
     c.additionalPasses[0].percent = 75;
     c.additionalPasses[0].fsr = 0;

@@ -8,7 +8,7 @@
 namespace chiaki_enhancement
 {
 constexpr uint32_t Magic = 0x58474e43; // CNGX, little endian, Windows x64 only
-constexpr uint32_t Version = 5;
+constexpr uint32_t Version = 6;
 constexpr unsigned MaxNrPasses = 3;
 constexpr unsigned SlotCount = 3;
 enum class Operation : uint32_t
@@ -23,7 +23,9 @@ enum Flag : uint32_t
     Fsr = 2,
     FrameGeneration = 4,
     Reset = 8,
-    BridgeTest = 16
+    BridgeTest = 16,
+    // RGBA16F, linear BT.2020, 1.0 = 203 cd/m2. Model inputs remain SDR sRGB.
+    HdrLinear = 32
 };
 enum class Result : uint32_t
 {
@@ -140,7 +142,7 @@ inline bool valid(const Command &c)
            c.percent >= 50 && c.percent <= 100 && c.sharpness <= 100 &&
            c.nrPassCount >= 1 && c.nrPassCount <= MaxNrPasses &&
            validTuning(c.nrTuning) && validPass(c.additionalPasses[0]) && validPass(c.additionalPasses[1]) &&
-           !(c.flags & ~(Neural | Fsr | FrameGeneration | Reset | BridgeTest)) &&
+           !(c.flags & ~(Neural | Fsr | FrameGeneration | Reset | BridgeTest | HdrLinear)) &&
            (c.operation == Operation::Shutdown ||
             (c.width && c.height && c.width <= 16384 && c.height <= 16384)) &&
            (c.operation != Operation::Process || (c.slot < SlotCount && (c.fenceValue & 1)));

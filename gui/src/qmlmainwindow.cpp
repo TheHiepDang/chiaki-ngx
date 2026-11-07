@@ -6994,8 +6994,9 @@ void QmlMainWindow::render()
         // the window. Crop is applied to the source before sending it to the worker.
         enhancement_native.width = static_cast<uint32_t>(qMax(1.0f, qMin(enhancement_width, float(swapchain_size.width()))));
         enhancement_native.height = static_cast<uint32_t>(qMax(1.0f, qMin(enhancement_height, float(swapchain_size.height()))));
-        const bool enhancement_hdr = pl_color_space_is_hdr(&enhancement_layout.color) || (hint_frame && pl_color_space_is_hdr(&hint_frame->color));
-        enhancement_pipeline->prepare(placebo_vulkan, enhancement_native, enhancement_options, enhancement_hdr);
+        // A frame gap must not reconfigure an HDR worker as SDR or discard held output.
+        if (hint_frame)
+            enhancement_pipeline->prepare(placebo_vulkan, enhancement_native, enhancement_options, hint_frame->color);
         enhancement_pipeline->setSourceInterval(uint64_t(qMax(0.0, stream_interval_s) * 1000000.0));
         if (hint_frame) {
             uint64_t signature = enhancement_direct_signature;
@@ -7014,7 +7015,8 @@ void QmlMainWindow::render()
                 native_target.num_planes = 1; native_target.planes[0].texture = input;
                 native_target.planes[0].components = 4;
                 for (int n = 0; n < 4; ++n) native_target.planes[0].component_mapping[n] = n;
-                native_target.repr = pl_color_repr_rgb; native_target.color = pl_color_space_srgb;
+                native_target.repr = pl_color_repr_rgb;
+                native_target.color = enhancement_pipeline->inputColor();
                 native_target.crop = {0, 0, float(enhancement_native.width), float(enhancement_native.height)};
                 pl_frame source = *hint_frame; source.overlays = nullptr; source.num_overlays = 0;
                 const auto crop = source.crop;
