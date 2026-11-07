@@ -1,8 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
+import "BarNavigation.js" as BarNavigation
 
 Button {
+    id: control
+    property Item navigationScope: null
     property bool firstInFocusChain: false
     property bool lastInFocusChain: false
     property bool sendOutput: false
@@ -18,6 +21,7 @@ Button {
     }
 
     Keys.onPressed: (event) => {
+        if (BarNavigation.handle(control, event)) return;
         switch (event.key) {
         case Qt.Key_Up:
             if (!firstInFocusChain) {

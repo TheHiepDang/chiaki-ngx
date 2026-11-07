@@ -27,6 +27,7 @@
     <file>ControllerMappingDialog.qml</file>
     <file>AutoConnectView.qml</file>
     <file>PsnView.qml</file>
+    <file>controls/BarNavigation.js</file>
     <file>controls/Button.qml</file>
     <file>controls/CheckBox.qml</file>
     <file>controls/ComboBox.qml</file>

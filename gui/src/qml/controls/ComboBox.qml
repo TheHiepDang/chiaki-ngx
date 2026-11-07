@@ -1,13 +1,17 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
+import "BarNavigation.js" as BarNavigation
 
 ComboBox {
+    id: control
+    property Item navigationScope: null
     property bool firstInFocusChain: false
     property bool lastInFocusChain: false
     implicitContentWidthPolicy: ComboBox.WidestText
 
     Keys.onPressed: (event) => {
+        if (BarNavigation.handle(control, event)) return;
         switch (event.key) {
         case Qt.Key_Up:
             if (!popup.visible) {

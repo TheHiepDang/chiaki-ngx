@@ -17,7 +17,15 @@ ScrollView {
     implicitHeight: naturalContentHeight
     clip: true
     contentHeight: naturalContentHeight
-    ScrollBar.horizontal.policy: horizontalBar ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    readonly property bool canScrollLeft: horizontalBar && contentItem && contentItem.contentX > 1
+    readonly property bool canScrollRight: horizontalBar && contentItem &&
+        contentItem.contentX < Math.max(0, contentWidth - availableWidth) - 1
+    function scrollOptions(direction) {
+        const maxX = Math.max(0, contentWidth - availableWidth);
+        contentItem.contentX = Math.max(0, Math.min(maxX,
+            contentItem.contentX + direction * Math.max(120, availableWidth * 0.75)));
+    }
     ScrollBar.vertical.policy: ScrollBar.AsNeeded
     contentWidth: horizontalBar ? Math.max(width - leftPadding - rightPadding, settingsColumn.implicitWidth) : availableWidth
     // A regular mouse wheel pans the strip; sliders keep arrow-key adjustment.
@@ -58,7 +66,7 @@ ScrollView {
     }
     GridLayout {
         columns: view.horizontalBar ? 100 : 1
-        columnSpacing: 24
+        columnSpacing: view.horizontalBar ? 12 : 24
         id: settingsColumn
         width: view.horizontalBar ? implicitWidth : view.availableWidth
         rowSpacing: 12
@@ -68,25 +76,37 @@ ScrollView {
             visible: !view.horizontalBar
             text: qsTr("Fine-tune streamed video. Exposure and Dark Area apply to SDR video.")
         }
-        C.CheckBox {
-            id: eyeEnabled
-            KeyNavigation.priority: KeyNavigation.BeforeItem
-            KeyNavigation.up: view.previousFocusItem
-            KeyNavigation.backtab: view.previousFocusItem
-            KeyNavigation.down: checked ? eyePreset : view.nextFocusItem
-            KeyNavigation.tab: checked ? eyePreset : view.nextFocusItem
-            objectName: "eyeCandyEnabled"
-            text: qsTr("Enable color adjustment")
-            checked: Chiaki.settings.placeboColorAdjustmentEnabled
-            onToggled: Chiaki.settings.placeboColorAdjustmentEnabled = checked
+        ColumnLayout {
+            Layout.alignment: Qt.AlignTop
+            spacing: 0
+            Label { visible: view.horizontalBar; text: qsTr("Eye Candy") }
+            C.CheckBox {
+                navigationScope: view.horizontalBar ? view : null
+                Layout.preferredHeight: view.horizontalBar ? 32 : -1
+                id: eyeEnabled
+                KeyNavigation.priority: KeyNavigation.BeforeItem
+                KeyNavigation.up: view.previousFocusItem
+                KeyNavigation.backtab: view.previousFocusItem
+                KeyNavigation.down: view.horizontalBar ? null : (checked ? eyePreset : view.nextFocusItem)
+                KeyNavigation.tab: checked ? eyePreset : view.nextFocusItem
+                objectName: "eyeCandyEnabled"
+                text: view.horizontalBar ? qsTr("Enable") : qsTr("Enable color adjustment")
+                checked: Chiaki.settings.placeboColorAdjustmentEnabled
+                onToggled: Chiaki.settings.placeboColorAdjustmentEnabled = checked
+            }
         }
-        RowLayout {
+        GridLayout {
+            columns: view.horizontalBar ? 1 : 2
+            rowSpacing: 0
+            Layout.alignment: Qt.AlignTop
             Label { text: qsTr("Color preset") }
             C.ComboBox {
+                navigationScope: view.horizontalBar ? view : null
+                Layout.preferredHeight: view.horizontalBar ? 32 : -1
                 id: eyePreset
                 objectName: "eyeCandyPreset"
                 KeyNavigation.priority: KeyNavigation.BeforeItem
-                KeyNavigation.down: popup.visible ? null : (currentIndex === 0 ? brightnessSlider : view.nextFocusItem)
+                KeyNavigation.down: view.horizontalBar || popup.visible ? null : (currentIndex === 0 ? brightnessSlider : view.nextFocusItem)
                 KeyNavigation.tab: currentIndex === 0 ? brightnessSlider : view.nextFocusItem
                 model: [qsTr("Custom"), qsTr("Neutral")]
                 currentIndex: Chiaki.settings.placeboColorAdjustmentPreset
@@ -97,7 +117,7 @@ ScrollView {
         GridLayout {
             columns: view.horizontalBar ? 100 : 1
             Layout.alignment: Qt.AlignTop
-            columnSpacing: 24
+            columnSpacing: view.horizontalBar ? 12 : 24
             enabled: Chiaki.settings.placeboColorAdjustmentEnabled && Chiaki.settings.placeboColorAdjustmentPreset === 0
             GridLayout {
                 columns: view.horizontalBar ? 3 : 4
@@ -106,21 +126,27 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Brightness") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
                     id: brightnessSlider
                     objectName: "eyeCandyBrightness"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: -0.14; to: 0.14; stepSize: 0.01
                     value: Chiaki.settings.placeboColorAdjustmentBrightness
                     onMoved: Chiaki.settings.placeboColorAdjustmentBrightness = value
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     objectName: "resetEyeCandyBrightness"
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset brightness")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset brightness to 0.00")
@@ -135,20 +161,26 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Contrast") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
                     objectName: "eyeCandyContrast"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: 0; to: 14.3; stepSize: 0.1
                     value: Chiaki.settings.placeboColorAdjustmentContrast
                     onMoved: Chiaki.settings.placeboColorAdjustmentContrast = value
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     objectName: "resetEyeCandyContrast"
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset contrast")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset contrast to 1.0")
@@ -163,20 +195,26 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Saturation") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
                     objectName: "eyeCandySaturation"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: 0; to: 14.3; stepSize: 0.1
                     value: Chiaki.settings.placeboColorAdjustmentSaturation
                     onMoved: Chiaki.settings.placeboColorAdjustmentSaturation = value
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     objectName: "resetEyeCandySaturation"
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset saturation")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset saturation to 1.00")
@@ -191,20 +229,26 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Gamma") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
                     objectName: "eyeCandyGamma"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: 0; to: 14.3; stepSize: 0.1
                     value: Chiaki.settings.placeboColorAdjustmentGamma
                     onMoved: Chiaki.settings.placeboColorAdjustmentGamma = value
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     objectName: "resetEyeCandyGamma"
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset gamma")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset gamma to 1.0")
@@ -219,8 +263,10 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Exposure") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "eyeCandyExposure"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: -100; to: 100; stepSize: 5
                     value: Chiaki.settings.eyeCandyExposure
                     onMoved: Chiaki.settings.eyeCandyExposure = Math.round(value)
@@ -229,13 +275,18 @@ ScrollView {
                     ToolTip.text: qsTr("Overall exposure in stops; 0 is neutral")
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     objectName: "resetEyeCandyExposure"
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset exposure")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset exposure to 0")
@@ -250,8 +301,10 @@ ScrollView {
                 columnSpacing: 8
                 Label { Layout.columnSpan: view.horizontalBar ? 3 : 1; text: qsTr("Dark Area") }
                 C.Slider {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "eyeCandyDarkArea"
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: view.horizontalBar ? 122 : 175
                     from: -100; to: 100; stepSize: 5
                     value: Chiaki.settings.eyeCandyDarkArea
                     onMoved: Chiaki.settings.eyeCandyDarkArea = Math.round(value)
@@ -260,16 +313,21 @@ ScrollView {
                     ToolTip.text: qsTr("Lift or deepen shadows; highlights stay unchanged when exposure is neutral")
                 }
                 C.Button {
+                    navigationScope: view.horizontalBar ? view : null
                     objectName: "resetEyeCandyDarkArea"
                     KeyNavigation.priority: KeyNavigation.BeforeItem
-                    KeyNavigation.down: view.nextFocusItem
+                    KeyNavigation.down: view.horizontalBar ? null : view.nextFocusItem
                     KeyNavigation.tab: view.nextFocusItem
                     flat: true
                     focusPolicy: Qt.StrongFocus
                     text: "\u21ba"
-                    font.pixelSize: 24
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
+                    font.pixelSize: view.horizontalBar ? 17 : 24
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    Layout.preferredWidth: view.horizontalBar ? 26 : 36
+                    Layout.preferredHeight: view.horizontalBar ? 28 : 36
                     Accessible.name: qsTr("Reset dark area")
                     ToolTip.visible: view.visible && (hovered || activeFocus)
                     ToolTip.text: qsTr("Reset dark area to 0")

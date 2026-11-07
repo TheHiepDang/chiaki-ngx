@@ -338,8 +338,9 @@ int main(int argc, char **argv)
     auto item = qobject_cast<QQuickItem *>(live.get());
     CHECK(item);
     QQmlComponent wrapperComponent(&engine);
-    wrapperComponent.setData("import QtQuick.Controls; import QtQuick.Controls.Material; Pane { Material.theme: Material.Dark; Material.accent: \"#00a7ff\"; font.pixelSize: 20; padding: 0; background: null }", QUrl());
+    wrapperComponent.setData("import QtQuick; import QtQuick.Controls; import QtQuick.Controls.Material; Pane { property int cancelCount: 0; Shortcut { sequences: [StandardKey.Cancel]; onActivated: parent.cancelCount++ } Material.theme: Material.Dark; Material.accent: \"#00a7ff\"; font.pixelSize: 20; padding: 0; background: null }", QUrl());
     std::unique_ptr<QObject> wrapper(wrapperComponent.create());
+    if (!wrapper) qCritical() << wrapperComponent.errors();
     auto wrapperItem = qobject_cast<QQuickItem *>(wrapper.get());
     CHECK(wrapperItem);
     wrapperItem->setParentItem(window.contentItem());
@@ -382,16 +383,60 @@ int main(int argc, char **argv)
     CHECK(rendererView && eyeView);
     QTest::qWait(30);
     const qreal rendererHeight = item->height();
-    CHECK(rendererHeight <= 176);
+    CHECK(rendererHeight <= 116);
     CHECK(rendererView->property("horizontalBar").toBool());
     auto rendererFlickable = rendererView->property("contentItem").value<QQuickItem *>();
     CHECK(rendererFlickable);
     rendererFlickable->setProperty("contentX", 0);
-    QWheelEvent wheel(QPointF(80, 140), window.mapToGlobal(QPoint(80, 140)),
+    QWheelEvent wheel(QPointF(80, 85), window.mapToGlobal(QPoint(80, 85)),
         QPoint(), QPoint(0, -120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
     QGuiApplication::sendEvent(&window, &wheel);
     app.processEvents();
     CHECK(rendererFlickable->property("contentX").toDouble() > 0);
+    rendererFlickable->setProperty("contentX", 0);
+    // Controller confirmation must update backend settings, not just check marks.
+    auto liveNr = live->findChild<QQuickItem *>("nrToggle");
+    auto liveStats = live->findChild<QQuickItem *>("gameplayStatsToggle");
+    auto livePassCount = live->findChild<QQuickItem *>("nrPassCount");
+    CHECK(liveNr && liveStats && livePassCount);
+    CHECK(liveNr->property("text").toString() == "Enable");
+    CHECK(liveNr->property("font").value<QFont>().pixelSize() == 14);
+    QSignalSpy nrToggles(liveNr, SIGNAL(toggled()));
+    liveNr->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(&window, Qt::Key_Return);
+    app.processEvents();
+    CHECK(!backend.settings()->value("enhancementNeural").toBool());
+    CHECK(nrToggles.count() == 1);
+    QTest::keyClick(&window, Qt::Key_Right);
+    CHECK(liveStats->hasActiveFocus()); // Disabled NR options are skipped.
+    QTest::keyClick(&window, Qt::Key_Left);
+    CHECK(liveNr->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Return);
+    app.processEvents();
+    CHECK(backend.settings()->value("enhancementNeural").toBool());
+    CHECK(nrToggles.count() == 2);
+    QTest::keyClick(&window, Qt::Key_Right);
+    CHECK(livePassCount->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Left);
+    CHECK(liveNr->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Down);
+    CHECK(liveNr->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Up);
+    CHECK(rendererTab->hasActiveFocus());
+    auto leftArrow = live->findChild<QObject *>("rendererScrollLeft");
+    auto rightArrow = live->findChild<QObject *>("rendererScrollRight");
+    CHECK(leftArrow && rightArrow);
+    rendererFlickable->setProperty("contentX", 0);
+    app.processEvents();
+    CHECK(!leftArrow->property("enabled").toBool() && rightArrow->property("enabled").toBool());
+    CHECK(QMetaObject::invokeMethod(rightArrow, "clicked"));
+    CHECK(rendererFlickable->property("contentX").toDouble() > 0);
+    CHECK(leftArrow->property("enabled").toBool());
+    rendererFlickable->setProperty("contentX", rendererView->property("contentWidth").toDouble() - rendererView->property("availableWidth").toDouble());
+    app.processEvents();
+    CHECK(!rightArrow->property("enabled").toBool());
+    CHECK(QMetaObject::invokeMethod(leftArrow, "clicked"));
+    CHECK(rightArrow->property("enabled").toBool());
     rendererFlickable->setProperty("contentX", 0);
     CHECK(eyeView->property("horizontalBar").toBool());
     CHECK(rendererView->property("contentWidth").toDouble() > rendererView->width());
@@ -402,7 +447,7 @@ int main(int argc, char **argv)
     }
     tabs->setProperty("currentIndex", 1);
     QTest::qWait(30);
-    CHECK(item->height() <= 176);
+    CHECK(item->height() <= 116);
     CHECK(qAbs(item->height() - rendererHeight) <= 1);
     CHECK(qAbs(item->height() - item->implicitHeight()) <= 1);
     CHECK(eyeView->property("contentHeight").toDouble() <= eyeView->height() + 1);
@@ -438,6 +483,18 @@ int main(int argc, char **argv)
     QTest::keyClick(&window, Qt::Key_Down);
     auto eyeEnabled = live->findChild<QQuickItem *>("eyeCandyEnabled");
     CHECK(eyeEnabled && eyeEnabled->hasActiveFocus());
+    QSignalSpy eyeToggles(eyeEnabled, SIGNAL(toggled()));
+    QTest::keyClick(&window, Qt::Key_Return);
+    CHECK(!backend.settings()->value("placeboColorAdjustmentEnabled").toBool());
+    CHECK(eyeToggles.count() == 1);
+    QTest::keyClick(&window, Qt::Key_Return);
+    CHECK(backend.settings()->value("placeboColorAdjustmentEnabled").toBool());
+    CHECK(eyeToggles.count() == 2);
+    QTest::keyClick(&window, Qt::Key_Right);
+    auto liveEyePreset = live->findChild<QQuickItem *>("eyeCandyPreset");
+    CHECK(liveEyePreset && liveEyePreset->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Left);
+    CHECK(eyeEnabled->hasActiveFocus());
     QTest::keyClick(&window, Qt::Key_PageUp);
     CHECK(rendererTab->hasActiveFocus() && tabs->property("currentIndex").toInt() == 0);
     QTest::keyClick(&window, Qt::Key_Tab, Qt::ControlModifier);
@@ -449,9 +506,15 @@ int main(int argc, char **argv)
     CHECK(tabs->property("currentIndex").toInt() == 1 && exposure->isVisible());
     live->setProperty("restoreFocusItem", QVariant::fromValue<QQuickItem *>(nullptr));
     exposure->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(&window, Qt::Key_Return);
+    CHECK(exposure->property("barEditing").toBool());
     QTest::keyClick(&window, Qt::Key_Right);
     CHECK(backend.settings()->value("eyeCandyExposure").toInt() == 5);
-    QTest::keyClick(&window, Qt::Key_Down);
+    QTest::keyClick(&window, Qt::Key_Escape);
+    CHECK(!exposure->property("barEditing").toBool());
+    CHECK(wrapper->property("cancelCount").toInt() == 0);
+    CHECK(exposure->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Right);
     auto exposureReset = live->findChild<QQuickItem *>("resetEyeCandyExposure");
     CHECK(exposureReset && exposureReset->hasActiveFocus());
     QTest::keyClick(&window, Qt::Key_Return);
@@ -465,7 +528,9 @@ int main(int argc, char **argv)
     auto darkReset = live->findChild<QQuickItem *>("resetEyeCandyDarkArea");
     CHECK(darkReset);
     darkReset->forceActiveFocus(Qt::TabFocusReason);
-    QTest::keyClick(&window, Qt::Key_Down);
+    QTest::keyClick(&window, Qt::Key_Up);
+    CHECK(eyeTab->hasActiveFocus() && tabs->property("currentIndex").toInt() == 1);
+    QTest::keyClick(&window, Qt::Key_PageUp);
     CHECK(rendererTab->hasActiveFocus() && tabs->property("currentIndex").toInt() == 0);
     if (!previewRoot.isEmpty()) {
         QDir().mkpath(previewRoot);
@@ -494,7 +559,7 @@ int main(int argc, char **argv)
         CHECK(capture("renderer-three-passes"));
         window.resize(960, 540); wrapperItem->setSize(QSizeF(960, 540)); item->setWidth(960);
         CHECK(capture("renderer-three-passes-540"));
-        CHECK(item->height() <= 176);
+        CHECK(item->height() <= 116);
         auto sharpReset = live->findChild<QQuickItem *>("resetNrSharpness");
         CHECK(sharpReset);
         sharpReset->forceActiveFocus(Qt::TabFocusReason);

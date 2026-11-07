@@ -22,7 +22,15 @@ ScrollView {
     implicitHeight: naturalContentHeight
     clip: true
     contentHeight: naturalContentHeight
-    ScrollBar.horizontal.policy: horizontalBar ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    readonly property bool canScrollLeft: horizontalBar && contentItem && contentItem.contentX > 1
+    readonly property bool canScrollRight: horizontalBar && contentItem &&
+        contentItem.contentX < Math.max(0, contentWidth - availableWidth) - 1
+    function scrollOptions(direction) {
+        const maxX = Math.max(0, contentWidth - availableWidth);
+        contentItem.contentX = Math.max(0, Math.min(maxX,
+            contentItem.contentX + direction * Math.max(120, availableWidth * 0.75)));
+    }
     ScrollBar.vertical.policy: ScrollBar.AsNeeded
     contentWidth: horizontalBar ? Math.max(width - leftPadding - rightPadding, settingsColumn.implicitWidth) : availableWidth
     // A regular mouse wheel pans the strip; sliders keep arrow-key adjustment.
@@ -62,13 +70,18 @@ ScrollView {
         }
     }
     component ResetButton: C.Button {
+        navigationScope: view.horizontalBar ? view : null
         property string resetLabel
         text: "\u21ba"
         flat: true
         focusPolicy: Qt.StrongFocus
-        font.pixelSize: 24
-        Layout.preferredWidth: 36
-        Layout.preferredHeight: 36
+        font.pixelSize: view.horizontalBar ? 17 : 24
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
+        Layout.preferredWidth: view.horizontalBar ? 26 : 36
+        Layout.preferredHeight: view.horizontalBar ? 28 : 36
         enabled: view.nrEnabled
         Accessible.name: resetLabel
         ToolTip.visible: view.visible && (hovered || activeFocus)
@@ -89,22 +102,24 @@ ScrollView {
             Layout.alignment: view.horizontalBar ? Qt.AlignLeft | Qt.AlignTop : Qt.AlignHCenter
             columns: view.horizontalBar ? 100 : 1
             rowSpacing: view.compact ? 6 : 12
-            columnSpacing: 20
+            columnSpacing: view.horizontalBar ? 12 : 20
             enabled: !Chiaki.window.enhancementApplying
             GridLayout {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Neural Rendering") }
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     id: nrToggle
                     KeyNavigation.priority: KeyNavigation.BeforeItem
                     KeyNavigation.up: view.previousFocusItem
                     KeyNavigation.backtab: view.previousFocusItem
                     objectName: "nrToggle"
-                    text: qsTr("Enable (experimental)")
+                    text: qsTr("Enable")
                     enabled: Chiaki.window.enhancementNeuralAvailable
                     checked: Chiaki.settings.enhancementNeural && Chiaki.window.enhancementNeuralAvailable
                     onToggled: Chiaki.settings.enhancementNeural = checked
@@ -114,15 +129,17 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
+                columnSpacing: view.horizontalBar ? 12 : 20
                 visible: Chiaki.settings.enhancementNeural
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR passes")}
                 C.ComboBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "nrPassCount"
                     visible: Chiaki.settings.enhancementNeural
                     enabled: Chiaki.window.enhancementNeuralAvailable
-                    Layout.preferredWidth: view.compact ? 200 : 250
+                    Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                     model: [qsTr("1 pass"), qsTr("2 passes"), qsTr("3 passes")]
                     currentIndex: Chiaki.settings.enhancementPassCount - 1
                     onActivated: (index) => Chiaki.settings.enhancementPassCount = index + 1
@@ -132,11 +149,13 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
+                columnSpacing: view.horizontalBar ? 12 : 20
                 visible: Chiaki.settings.enhancementNeural && Chiaki.settings.enhancementPassCount > 1
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Pass settings")}
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "nrCustomizePasses"
                     visible: Chiaki.settings.enhancementNeural && Chiaki.settings.enhancementPassCount > 1
                     enabled: view.nrEnabled
@@ -149,15 +168,17 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
+                columnSpacing: view.horizontalBar ? 12 : 20
                 visible: Chiaki.settings.enhancementNeural && view.customPasses
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Configure pass")}
                 C.ComboBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "nrEditingPass"
                     visible: Chiaki.settings.enhancementNeural && view.customPasses
                     enabled: Chiaki.window.enhancementNeuralAvailable
-                    Layout.preferredWidth: view.compact ? 200 : 250
+                    Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                     model: [qsTr("Pass 1"), qsTr("Pass 2"), qsTr("Pass 3")].slice(0, Chiaki.settings.enhancementPassCount)
                     currentIndex: Chiaki.settings.enhancementEditingPass
                     onActivated: (index) => Chiaki.settings.enhancementEditingPass = index
@@ -172,13 +193,15 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR preset") }
                 C.ComboBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "nrPreset"
                     enabled: view.nrEnabled
-                    Layout.preferredWidth: view.compact ? 200 : 250
+                    Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                     model: [qsTr("Default"), qsTr("Natural"), qsTr("Cinematic")]
                     currentIndex: Chiaki.settings.enhancementNrPreset
                     onActivated: (index) => Chiaki.settings.enhancementNrPreset = index
@@ -188,13 +211,15 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR Intensity") }
                 RowLayout {
                     C.Slider {
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
                         objectName: "nrIntensity"
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         enabled: view.nrEnabled
                         from: 0; to: 1; stepSize: 0.05
                         value: Chiaki.settings.enhancementIntensity
@@ -212,13 +237,15 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR Local Structure") }
                 RowLayout {
                     C.Slider {
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
                         objectName: "nrLocalStructure"
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         enabled: view.nrEnabled
                         from: 0; to: 2; stepSize: 0.05
                         value: Chiaki.settings.enhancementLocalStructure
@@ -236,13 +263,15 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR Local Tone") }
                 RowLayout {
                     C.Slider {
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
                         objectName: "nrLocalTone"
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         enabled: view.nrEnabled
                         from: 0; to: 2; stepSize: 0.05
                         value: Chiaki.settings.enhancementLocalTone
@@ -260,10 +289,12 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR Automatic Mask") }
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "nrAutomaticMask"
                     text: qsTr("Enable")
                     enabled: view.nrEnabled
@@ -275,13 +306,15 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR Skin Structure") }
                 RowLayout {
                     C.Slider {
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
                         objectName: "nrSkinStructure"
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         enabled: view.nrEnabled && Chiaki.settings.enhancementAutomaticMask
                         from: -1; to: 2.5; stepSize: 0.05
                         value: Chiaki.settings.enhancementSkinStructure
@@ -307,12 +340,14 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("NR resolution") }
                 RowLayout {
                     C.Slider {
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         from: 50; to: 100; stepSize: 1
                         enabled: Chiaki.window.enhancementNeuralAvailable && Chiaki.settings.enhancementNeural
                         objectName: "nrScale"
@@ -337,11 +372,13 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
+                columnSpacing: view.horizontalBar ? 12 : 20
                 visible: view.showUpscaler
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("FSR upscaling")}
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     objectName: "fsrToggle"
                     visible: view.showUpscaler
                     text: qsTr("Reconstruct reduced output")
@@ -354,15 +391,17 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
+                columnSpacing: view.horizontalBar ? 12 : 20
                 visible: view.showSharpness
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Sharpness")}
                 RowLayout {
                     objectName: "sharpnessRow"
                     visible: view.showSharpness
                     C.Slider {
-                        Layout.preferredWidth: view.compact ? 200 : 250
+                        navigationScope: view.horizontalBar ? view : null
+                        Layout.preferredHeight: view.horizontalBar ? 32 : -1
+                        Layout.preferredWidth: view.horizontalBar ? 128 : (view.compact ? 200 : 250)
                         from: 0; to: 100; stepSize: 1
                         enabled: Chiaki.window.enhancementNeuralAvailable && Chiaki.settings.enhancementNeural && Chiaki.settings.enhancementFsr && Chiaki.window.enhancementUpscalingEligible
                         objectName: "sharpness"
@@ -382,10 +421,12 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Gameplay statistics") }
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     id: gameplayStats
                     objectName: "gameplayStatsToggle"
                     text: qsTr("Show FPS overlay")
@@ -397,14 +438,16 @@ ScrollView {
                 columns: view.horizontalBar ? 1 : 2
                 Layout.alignment: Qt.AlignTop
                 rowSpacing: 0
-                columnSpacing: 20
-                Layout.minimumWidth: view.horizontalBar ? 270 : 0
+                columnSpacing: view.horizontalBar ? 12 : 20
+                Layout.minimumWidth: view.horizontalBar ? 140 : 0
                 Label { Layout.preferredWidth: view.horizontalBar ? -1 : 190; text: qsTr("Frame generation") }
                 C.CheckBox {
+                    navigationScope: view.horizontalBar ? view : null
+                    Layout.preferredHeight: view.horizontalBar ? 32 : -1
                     text: qsTr("2× (experimental)")
                     objectName: "fgToggle"
                     KeyNavigation.priority: KeyNavigation.BeforeItem
-                    KeyNavigation.down: view.nextFocusItem
+                    KeyNavigation.down: view.horizontalBar ? null : view.nextFocusItem
                     KeyNavigation.tab: view.nextFocusItem
                     checked: Chiaki.settings.enhancementFrameGeneration
                     onToggled: Chiaki.settings.enhancementFrameGeneration = checked
