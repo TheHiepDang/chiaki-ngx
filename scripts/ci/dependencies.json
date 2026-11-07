@@ -15,8 +15,8 @@
       "sha256": "5865360c3295038f0ff979d303bb7eb9437eec09fbc08686967d3b5d41d9c019"
     },
     "ffmpeg-windows": {
-      "url": "https://github.com/streetpea/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip",
-      "sha256": "d61fd75b60770ccf025b20e57b5c01baff58032024b92cfed21d8d0897bf1418"
+      "url": "https://github.com/streetpea/FFmpeg-Builds/releases/download/autobuild-2026-10-31-10-57/ffmpeg-n7.1.5-35-g98581d546f-win64-gpl-shared-7.1.zip",
+      "sha256": "7762d9f2ad4a5a36e2783c6462192853fefb28aece0a337a1300f019da53577e"
     },
     "sdl3": {
       "url": "https://github.com/libsdl-org/SDL/releases/download/release-3.4.0/SDL3-3.4.0.tar.gz",
@@ -32,7 +32,7 @@
     },
     "linuxdeploy": {
       "url": "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage",
-      "sha256": "8aea8da0f7f7039d2a2cecb14657d752a222a5e1d3825caeef186c82f751cdd1"
+      "sha256": "df908b19f1ed1cdafa79508d415aa12d6c56ce4d56d4149aa8c09286718706e5"
     },
     "linuxdeploy-qt": {
       "url": "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage",
