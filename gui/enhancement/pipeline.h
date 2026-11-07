@@ -35,6 +35,9 @@ class EnhancementPipeline : public QObject
     ~EnhancementPipeline() override;
     void prepare(pl_vulkan vk, chiaki_enhancement::Extent native, const EnhancementOptions &options,
                  bool hdr);
+    void prepare(pl_vulkan vk, chiaki_enhancement::Extent native, const EnhancementOptions &options,
+                 const pl_color_space &sourceColor);
+    pl_color_space inputColor() const;
     pl_tex beginFrame(uint64_t frameId, uint64_t timestampUs);
     bool submitFrame();
     bool outputFrame(pl_frame &frame);

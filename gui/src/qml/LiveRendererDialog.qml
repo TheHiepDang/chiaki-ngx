@@ -10,8 +10,8 @@ FocusScope {
     visible: Chiaki.window.rtxSettingsSupported
     enabled: Chiaki.window.rtxSettingsSupported
     focus: true
-    implicitHeight: Math.ceil(header.implicitHeight + 4 + 20
-        + (bar.currentIndex === 0 ? enhancements.naturalContentHeight : eyeCandy.naturalContentHeight))
+    // A fixed, shallow strip keeps the game visible as options change.
+    implicitHeight: 176
     readonly property bool applying: Chiaki.window.enhancementApplying
     onApplyingChanged: if (!applying && visible) Qt.callLater(focusInitialItem)
     property Item restoreFocusItem
@@ -36,13 +36,13 @@ FocusScope {
     Rectangle {
         objectName: "rendererDialogBackground"
         anchors.fill: parent
-        color: Qt.rgba(Material.background.r, Material.background.g, Material.background.b, 0.5)
+        color: Qt.rgba(Material.background.r, Material.background.g, Material.background.b, 0.88)
     }
     Keys.onEscapePressed: root.closeDialog()
     ColumnLayout {
         visible: !dialog.applying
         anchors.fill: parent
-        anchors.margins: 10
+        anchors.margins: 8
         spacing: 4
         RowLayout {
             id: header
@@ -50,7 +50,7 @@ FocusScope {
             TabBar {
                 id: bar
                 objectName: "rendererTabs"
-                Layout.fillWidth: true
+                Layout.preferredWidth: Math.min(360, dialog.width - closeButton.implicitWidth - 24)
                 background: Item { }
                 TabButton {
                     id: rendererTab
@@ -62,7 +62,7 @@ FocusScope {
                     KeyNavigation.backtab: closeButton
                     KeyNavigation.down: enhancements.firstControl
                     background: Rectangle {
-                        color: "transparent"
+                        color: parent.checked ? Qt.rgba(Material.accent.r, Material.accent.g, Material.accent.b, 0.18) : "transparent"
                         border.color: rendererTab.activeFocus ? Material.accent : "transparent"
                         border.width: 2
                     }
@@ -77,7 +77,7 @@ FocusScope {
                     KeyNavigation.backtab: rendererTab
                     KeyNavigation.down: eyeCandy.firstControl
                     background: Rectangle {
-                        color: "transparent"
+                        color: parent.checked ? Qt.rgba(Material.accent.r, Material.accent.g, Material.accent.b, 0.18) : "transparent"
                         border.color: eyeCandyTab.activeFocus ? Material.accent : "transparent"
                         border.width: 2
                     }
@@ -97,8 +97,8 @@ FocusScope {
             currentIndex: bar.currentIndex
             Layout.fillWidth: true
             Layout.fillHeight: true
-            EnhancementSettings { id: enhancements; compact: true; previousFocusItem: closeButton; nextFocusItem: rendererTab }
-            EyeCandySettings { id: eyeCandy; previousFocusItem: closeButton; nextFocusItem: rendererTab }
+            EnhancementSettings { id: enhancements; compact: true; horizontalBar: true; previousFocusItem: closeButton; nextFocusItem: rendererTab }
+            EyeCandySettings { id: eyeCandy; horizontalBar: true; previousFocusItem: closeButton; nextFocusItem: rendererTab }
         }
     }
     Rectangle {

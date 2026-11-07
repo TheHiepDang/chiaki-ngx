@@ -44,6 +44,56 @@ cbuffer Params : register(b0) {
     float4 native = a.Load(int3(p.xy,0));
     target[p.xy] = float4(saturate(native.rgb+b.Load(int3(p.xy,0)).rgb-c.Load(int3(p.xy,0)).rgb),1);
 }
+// HDR transport is linear BT.2020, with 1.0 = 203 nits. Only the model reference
+// is compressed/gamut-limited; the original HDR frame never passes through UNORM.
+float3 to709(float3 v) {
+    return mul(float3x3(1.660491,-0.587641,-0.072850,
+                       -0.124550,1.132900,-0.008349,
+                       -0.018151,-0.100579,1.118730),v);
+}
+float3 to2020(float3 v) {
+    return mul(float3x3(0.627404,0.329283,0.043313,
+                       0.069097,0.919540,0.011362,
+                       0.016392,0.088013,0.895595),v);
+}
+float3 encodeSrgb(float3 v) {
+    return float3(v.r <= 0.0031308 ? 12.92*v.r : 1.055*pow(v.r,1.0/2.4)-0.055,
+                  v.g <= 0.0031308 ? 12.92*v.g : 1.055*pow(v.g,1.0/2.4)-0.055,
+                  v.b <= 0.0031308 ? 12.92*v.b : 1.055*pow(v.b,1.0/2.4)-0.055);
+}
+float3 decodeSrgb(float3 v) {
+    v = saturate(v);
+    return float3(v.r <= 0.04045 ? v.r/12.92 : pow((v.r+0.055)/1.055,2.4),
+                  v.g <= 0.04045 ? v.g/12.92 : pow((v.g+0.055)/1.055,2.4),
+                  v.b <= 0.04045 ? v.b/12.92 : pow((v.b+0.055)/1.055,2.4));
+}
+[numthreads(8,8,1)] void hdrProxyMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    float3 rgb = to709(a.Load(int3(p.xy,0)).rgb);
+    float peak = max(0,max(rgb.r,max(rgb.g,rgb.b)));
+    target[p.xy] = float4(encodeSrgb(saturate(rgb/(1+peak))),1);
+}
+[numthreads(8,8,1)] void hdrResidualMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    float4 original = a.Load(int3(p.xy,0));
+    float3 rgb = to709(original.rgb);
+    float gain = min(8.0,1+max(0,max(rgb.r,max(rgb.g,rgb.b))));
+    // Compare the actual quantized/reconstructed SDR pair, not an ideal proxy:
+    // equal inputs then have exactly zero delta, even outside the SDR gamut.
+    float3 delta = decodeSrgb(b.Load(int3(p.xy,0)).rgb)-decodeSrgb(c.Load(int3(p.xy,0)).rgb);
+    delta = clamp(delta,-0.25,0.25)*gain;
+    target[p.xy] = float4(original.rgb+to2020(delta),original.a);
+}
+// Synthetic HDR values for GPU validation (black, shadows, diffuse white,
+// specular highlights and a saturated wide-gamut primary).
+[numthreads(8,8,1)] void hdrPatternMain(uint3 p : SV_DispatchThreadID) {
+    if(any(p.xy >= outputSize)) return;
+    uint band = p.x*6/outputSize.x;
+    float3 v = band==0 ? float3(0,0,0) : band==1 ? float3(0.02,0.02,0.02) :
+               band==2 ? float3(1,1,1) : band==3 ? float3(5,5,5) :
+               band==4 ? float3(20,20,20) : float3(4,0.1,0.05);
+    target[p.xy] = float4(v,1);
+}
 )CNGX";
 
 static const char *fsrShader = R"CNGX(

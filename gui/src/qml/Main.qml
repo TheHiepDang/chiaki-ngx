@@ -87,6 +87,8 @@ Item {
             if (loader.item.showEnhancements)
                 loader.item.showEnhancements();
             placeboSettingsRect.opacity = 1.0;
+            if (root.liveRtxSettings)
+                console.info("[RTX][Settings] Opened top bar; width=" + root.width);
             grabInput(loader);
             if (!loader.item.restoreFocusItem || !loader.item.restoreFocusItem.visible || !loader.item.restoreFocusItem.enabled) {
                 if (loader.item.focusInitialItem) {
@@ -111,6 +113,7 @@ Item {
         useSeparateStreamSettingsWindows = false;
        }
        else if(placeboSettingsRect.opacity) {
+        if (root.liveRtxSettings) console.info("[RTX][Settings] Closed top bar");
         placeboSettingsRect.opacity = 0.0;
         const loader = useSeparateStreamSettingsWindows ? separatePlaceboSettingsLoader : placeboSettingsLoader;
         loader.item.restoreFocusItem = Window.window.activeFocusItem;
@@ -328,7 +331,7 @@ Item {
         visible: opacity && !useSeparateStreamSettingsWindows
         height: Math.min(root.height, root.liveRtxSettings && placeboSettingsLoader.item
             ? placeboSettingsLoader.item.implicitHeight : 650)
-        width: Math.min(root.width, root.liveRtxSettings ? 540 : 1200)
+        width: root.liveRtxSettings ? root.width : Math.min(root.width, 1200)
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         color: root.liveRtxSettings ? "transparent" : Material.background
@@ -413,7 +416,7 @@ Item {
         modality: Qt.NonModal
         x: Math.round(root.mapToGlobal(0, 0).x)
         y: Math.round(root.mapToGlobal(0, 0).y)
-        width: Math.min(Math.round(root.width), root.liveRtxSettings ? 540 : 1200)
+        width: root.liveRtxSettings ? Math.round(root.width) : Math.min(Math.round(root.width), 1200)
         height: Math.min(Math.round(root.height), root.liveRtxSettings && separatePlaceboSettingsLoader.item
             ? Math.ceil(separatePlaceboSettingsLoader.item.implicitHeight) : 650)
         onVisibleChanged: if (visible) requestActivate()

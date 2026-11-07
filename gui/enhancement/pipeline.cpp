@@ -49,6 +49,7 @@ struct EnhancementPipeline::Impl
              lastCompleted = 0;
     int submitSlot = -1, outputSlot = -1;
     bool hdr = false;
+    pl_color_space sourceColor = pl_color_space_srgb, workingColor = pl_color_space_srgb;
     bool applying = false;
     void setApplying(bool value) {
         if (applying == value) return;
@@ -91,6 +92,7 @@ struct EnhancementPipeline::Impl
         Image input, real, generated;
         VkSemaphore fence = VK_NULL_HANDLE;
         uint64_t value = 0;
+        pl_color_space color = pl_color_space_srgb;
     };
     std::array<Slot, SlotCount> resources{};
     PFN_vkGetDeviceProcAddr deviceProc = nullptr;
@@ -315,7 +317,7 @@ struct EnhancementPipeline::Impl
         ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         ci.pNext = &external;
         ci.imageType = VK_IMAGE_TYPE_2D;
-        ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+        ci.format = hdr ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM;
         ci.extent = {native.width, native.height, 1};
         ci.mipLevels = 1;
         ci.arrayLayers = 1;
@@ -517,10 +519,10 @@ struct EnhancementPipeline::Impl
             runtime = QCoreApplication::applicationDirPath() + QStringLiteral("/runtimes");
         if (options.neural || options.frameGeneration)
         {
-            const bool sm86 = options.frameGeneration && usesSm86(
+            const bool sm86 = options.frameGeneration && !hdr && usesSm86(
                 QString::fromUtf8(p.properties.deviceName).toStdWString());
             qInfo() << "[RTX][RuntimeRoute] sm86=" << sm86;
-            const QString error = verifyRuntimeManifest(runtime, options.neural, options.frameGeneration, sm86);
+            const QString error = verifyRuntimeManifest(runtime, options.neural, options.frameGeneration && !hdr, sm86);
             if (!error.isEmpty())
             {
                 fail(error);
@@ -531,6 +533,11 @@ struct EnhancementPipeline::Impl
         qInfo().nospace() << "[RTX][Config] native=" << native.width << 'x' << native.height
             << " nr=" << options.neural << " percent=" << options.percent << " fsr=" << options.fsr
             << " sharpness=" << options.sharpness << " fg=" << options.frameGeneration;
+        qInfo() << "[RTX][HDR] enabled=" << hdr << "shared_format=" << (hdr ? "RGBA16F" : "RGBA8")
+                << "working_color=" << (hdr ? "linear BT.2020; white=203 nits" : "sRGB")
+                << "source_transfer=" << int(sourceColor.transfer)
+                << "source_primaries=" << int(sourceColor.primaries)
+                << "source_peak_nits=" << workingColor.hdr.max_luma;
         config = Command{};
         config.width = native.width;
         config.height = native.height;
@@ -544,7 +551,7 @@ struct EnhancementPipeline::Impl
         config.flags = (options.neural ? Neural : 0) |
                        (options.frameGeneration ? FrameGeneration : 0) |
                        ((options.neural && options.fsr && canUpscale(native, work)) ? Fsr : 0) |
-                       (options.bridgeTest ? BridgeTest : 0);
+                       (options.bridgeTest ? BridgeTest : 0) | (hdr ? HdrLinear : 0);
         qInfo() << "[RTX][NR] configured_passes=" << config.nrPassCount;
         for (unsigned n = 0; n < config.nrPassCount; ++n) {
             const auto p = passConfig(config, n);
@@ -704,10 +711,31 @@ void EnhancementPipeline::reset()
 void EnhancementPipeline::prepare(pl_vulkan vk, Extent native, const EnhancementOptions &options,
                                   bool hdr)
 {
+    prepare(vk, native, options, hdr ? pl_color_space_hdr10 : pl_color_space_srgb);
+}
+pl_color_space EnhancementPipeline::inputColor() const
+{
+    return impl->workingColor;
+}
+void EnhancementPipeline::prepare(pl_vulkan vk, Extent native, const EnhancementOptions &options,
+                                  const pl_color_space &sourceColor)
+{
     auto &i = *impl;
+    const bool hdr = pl_color_space_is_hdr(&sourceColor);
+    const bool sameEncoding = i.sourceColor.transfer == sourceColor.transfer &&
+                              i.sourceColor.primaries == sourceColor.primaries;
+    i.sourceColor = sourceColor;
+    i.workingColor = hdr ? sourceColor : pl_color_space_srgb;
+    if (hdr) {
+        // Infer luminance before replacing the transfer: LINEAR alone implies SDR.
+        pl_color_space_infer(&i.workingColor);
+        i.workingColor.primaries = PL_COLOR_PRIM_BT_2020;
+        i.workingColor.transfer = PL_COLOR_TRC_LINEAR;
+        i.workingColor.hdr.min_luma = PL_COLOR_HDR_BLACK;
+    }
     // Reconstruction choices do not alter resources or NGX feature state.
     // Never restart a worker with an in-flight frame just to change FSR/RCAS.
-    const bool sameResources = i.hdr == hdr && i.vk == vk && i.native.width == native.width &&
+    const bool sameResources = sameEncoding && i.hdr == hdr && i.vk == vk && i.native.width == native.width &&
         i.native.height == native.height && i.options.neural == options.neural &&
         i.options.frameGeneration == options.frameGeneration && i.options.bridgeTest == options.bridgeTest &&
         (!options.neural || (i.options.percent == options.percent && i.options.nrPassCount == options.nrPassCount &&
@@ -737,10 +765,10 @@ void EnhancementPipeline::prepare(pl_vulkan vk, Extent native, const Enhancement
         i.report(QStringLiteral("Off"));
         return;
     }
-    if (hdr)
+    if (hdr && !options.neural && !options.bridgeTest)
     {
-        if (!i.failed)
-            i.fail(QStringLiteral("Enhancements are SDR-only; ordinary HDR playback retained"));
+        i.setApplying(false);
+        i.report(QStringLiteral("HDR frame generation is not enabled; ordinary HDR playback retained"));
         return;
     }
     if (!vk)
@@ -773,6 +801,7 @@ pl_tex EnhancementPipeline::beginFrame(uint64_t frameId, uint64_t timestampUs)
                 return nullptr;
             }
             i.release(s.input, s, s.value);
+            s.color = i.workingColor;
             i.submitSlot = int(n);
             i.pending = i.config;
             i.pending.operation = Operation::Process;
@@ -828,7 +857,7 @@ bool EnhancementPipeline::outputFrame(pl_frame &frame)
         frame.planes[0].component_mapping[c] = c;
     frame.repr = pl_color_repr_rgb;
     frame.repr.alpha = PL_ALPHA_NONE;
-    frame.color = pl_color_space_srgb;
+    frame.color = i.resources[i.outputSlot].color;
     frame.crop = {0, 0, float(i.native.width), float(i.native.height)};
     return true;
 #else

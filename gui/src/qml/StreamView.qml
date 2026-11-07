@@ -108,22 +108,6 @@ Item {
         function onVisibilityChanged() { view.updateSeparateMenuGeometry() }
     }
 
-    ToolButton {
-        id: liveRendererButton
-        objectName: "liveRendererButton"
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 12
-        visible: Chiaki.window.rtxSettingsSupported && Chiaki.session && !sessionLoading && !sessionError && !menuController.open && !menuController.closing
-        text: qsTr("RTX settings")
-        icon.source: "qrc:/icons/settings-20px.svg"
-        checkable: true
-        checked: root.rendererSettingsOpen
-        onClicked: root.toggleRendererSettings()
-        ToolTip.visible: hovered
-        ToolTip.text: qsTr("RTX settings (%1)").arg(Chiaki.settings.rendererShortcut)
-    }
-
     Rectangle {
         anchors.fill: parent
         z: 100
